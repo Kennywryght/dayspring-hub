@@ -18,6 +18,8 @@ export default function UnifiedLogin() {
   const [studentPassword, setStudentPassword] = useState('');
   const [parentEmail, setParentEmail] = useState('');
   const [parentPassword, setParentPassword] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');         // ✅ NEW
+  const [adminPassword, setAdminPassword] = useState('');   // ✅ NEW
 
   // Password visibility
   const [showTeacherPass, setShowTeacherPass] = useState(false);
@@ -99,7 +101,7 @@ export default function UnifiedLogin() {
       const res = await fetch(`${API_URL}auth/admin/login/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: teacherEmail, password: teacherPassword }),
+        body: JSON.stringify({ email: adminEmail, password: adminPassword }), // ✅ FIXED
       });
       if (!res.ok) throw new Error((await res.json()).detail || 'Invalid credentials');
       const data = await res.json();
@@ -298,8 +300,8 @@ export default function UnifiedLogin() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
               <input
                 type="email"
-                value={teacherEmail}
-                onChange={(e) => setTeacherEmail(e.target.value)}
+                value={adminEmail}                               // ✅ FIXED
+                onChange={(e) => setAdminEmail(e.target.value)}  // ✅ FIXED
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 outline-none transition"
                 placeholder="admin@school.com"
                 required
@@ -310,8 +312,8 @@ export default function UnifiedLogin() {
               <div className="relative">
                 <input
                   type={showAdminPass ? 'text' : 'password'}
-                  value={teacherPassword}
-                  onChange={(e) => setTeacherPassword(e.target.value)}
+                  value={adminPassword}                                // ✅ FIXED
+                  onChange={(e) => setAdminPassword(e.target.value)}   // ✅ FIXED
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 outline-none transition pr-12"
                   placeholder="••••••••"
                   required

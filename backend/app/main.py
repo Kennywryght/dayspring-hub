@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -10,10 +11,19 @@ from app.routers import (
 
 app = FastAPI(title="Dayspring Student Support Hub", version="1.0.0")
 
-# CORS – allow your frontend origin
+# Dynamically read allowed origins from environment variable.
+# Fallback includes your production Vercel URL and localhost for development.
+cors_origins = os.getenv(
+    "CORS_ORIGINS",
+    "https://dayspring-hub.vercel.app,http://localhost:5173"
+).split(",")
+
+# Strip whitespace from each origin
+allow_origins = [origin.strip() for origin in cors_origins if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
