@@ -73,7 +73,7 @@ async def submit_assignment(
         return result.data[0]
     raise HTTPException(status_code=500, detail="Submission failed")
 
-# Teacher view submissions for an assignment
+# Teacher view submissions for an assignment (now includes grade/feedback)
 @router.get("/{assignment_id}/")
 async def get_submissions(assignment_id: str, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "teacher":
@@ -85,3 +85,49 @@ async def get_submissions(assignment_id: str, current_user: dict = Depends(get_c
     
     result = supabase.table("submissions").select("*, students(display_name)").eq("assignment_id", assignment_id).execute()
     return result.data
+
+# NEW: Teacher grade a submission
+@router.put("/{submission_id}/grade/")
+async def grade_submission(
+    submission_id: str,
+    grade: Optional[str] = Form(None),
+    feedback: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user)
+):
+    if current_user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Only teachers can grade")
+    
+    # Verify the submission exists and the teacher owns the assignment
+    sub = supabase.table("submissions").select("*, assignments!inner(teacher_id)").eq("id", submission_id).single().execute()
+    if not sub.data:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    if sub.data["assignments"]["teacher_id"] != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your assignment")
+    
+    update_data = {}
+    if grade is not None:
+        update_data["grade"] = grade
+    if feedback is not None:
+        update_data["feedback"] = feedback
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No data to update")
+    
+    supabase.table("submissions").update(update_data).eq("id", submission_id).execute()
+    return {"message": "Grade saved"}
+
+# Parent: view a child's submission for a specific assignment
+@router.get("/student/{student_id}/{assignment_id}/")
+async def get_submission_for_parent(
+    student_id: str,
+    assignment_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    if current_user["role"] != "parent":
+        raise HTTPException(status_code=403, detail="Only parents can view this")
+    if student_id not in current_user.get("student_ids", []):
+        raise HTTPException(status_code=403, detail="Not your child")
+    sub = supabase.table("submissions").select("*").eq("assignment_id", assignment_id).eq("student_id", student_id).execute()
+    if sub.data:
+        return sub.data[0]
+    return {}

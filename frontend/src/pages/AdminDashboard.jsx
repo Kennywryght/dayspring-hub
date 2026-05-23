@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://dayspring-hub.onrender.com/api/v1/';
 
-// Optional click sound
 const useClickSound = () => {
   const audioRef = useRef(null);
   if (!audioRef.current) {
@@ -21,11 +20,12 @@ export default function AdminDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const playClick = useClickSound();
-  const [tab, setTab] = useState('classes');
+  const [tab, setTab] = useState('home');
 
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [parents, setParents] = useState([]);
   const [assignmentsList, setAssignmentsList] = useState([]);
   const [stats, setStats] = useState({});
 
@@ -35,9 +35,16 @@ export default function AdminDashboard() {
   const [newTeacherEmail, setNewTeacherEmail] = useState('');
   const [newTeacherPass, setNewTeacherPass] = useState('');
   const [newTeacherName, setNewTeacherName] = useState('');
+  const [newParentEmail, setNewParentEmail] = useState('');
+  const [newParentPass, setNewParentPass] = useState('');
+  const [newParentName, setNewParentName] = useState('');
   const [assignClassId, setAssignClassId] = useState('');
   const [assignTeacherId, setAssignTeacherId] = useState('');
   const [assignSubjectId, setAssignSubjectId] = useState('');
+
+  const [unassignedStudents, setUnassignedStudents] = useState([]);
+  const [linkStudentId, setLinkStudentId] = useState('');
+  const [linkParentEmail, setLinkParentEmail] = useState('');
 
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('success');
@@ -50,24 +57,37 @@ export default function AdminDashboard() {
     fetchAll();
   }, [tab]);
 
+  useEffect(() => {
+    if (tab === 'link' && unassignedStudents.length === 0) {
+      fetchUnassignedStudents();
+    }
+  }, [tab]);
+
   const headers = {
     Authorization: `Bearer ${user?.access_token || ''}`,
   };
 
   const fetchAll = async () => {
     if (!user?.access_token) return;
-    const [cRes, sRes, tRes, aRes, stRes] = await Promise.all([
+    const [cRes, sRes, tRes, pRes, aRes, stRes] = await Promise.all([
       fetch(`${API_URL}admin/classes/`, { headers }),
       fetch(`${API_URL}admin/subjects/`, { headers }),
       fetch(`${API_URL}admin/teachers/`, { headers }),
+      fetch(`${API_URL}admin/parents/`, { headers }),
       fetch(`${API_URL}admin/assignments/`, { headers }),
       fetch(`${API_URL}admin/stats/`, { headers }),
     ]);
     if (cRes.ok) setClasses(await cRes.json());
     if (sRes.ok) setSubjects(await sRes.json());
     if (tRes.ok) setTeachers(await tRes.json());
+    if (pRes.ok) setParents(await pRes.json());
     if (aRes.ok) setAssignmentsList(await aRes.json());
     if (stRes.ok) setStats(await stRes.json());
+  };
+
+  const fetchUnassignedStudents = async () => {
+    const res = await fetch(`${API_URL}admin/students/unassigned/`, { headers });
+    if (res.ok) setUnassignedStudents(await res.json());
   };
 
   const showMsg = (text, type = 'success') => {
@@ -134,6 +154,27 @@ export default function AdminDashboard() {
     }
   };
 
+  const addParent = async () => {
+    if (!newParentEmail || !newParentPass || !newParentName)
+      return showMsg('All parent fields are required', 'error');
+    const params = new URLSearchParams({
+      email: newParentEmail,
+      password: newParentPass,
+      full_name: newParentName,
+    });
+    const res = await fetch(`${API_URL}admin/parents/?${params}`, { method: 'POST', headers });
+    if (res.ok) {
+      showMsg('Parent created');
+      setNewParentEmail('');
+      setNewParentPass('');
+      setNewParentName('');
+      fetchAll();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      showMsg(err.detail || 'Failed to create parent', 'error');
+    }
+  };
+
   const assignTeacher = async () => {
     if (!assignClassId || !assignTeacherId || !assignSubjectId)
       return showMsg('Please select class, teacher, and subject', 'error');
@@ -155,43 +196,131 @@ export default function AdminDashboard() {
     }
   };
 
-  // Navigation for the Layout component (tab switching)
+  const handleLinkParent = async () => {
+    if (!linkStudentId || !linkParentEmail.trim()) {
+      showMsg('Please select a student and enter a parent email', 'error');
+      return;
+    }
+    const params = new URLSearchParams({
+      student_id: linkStudentId,
+      parent_email: linkParentEmail.trim(),
+    });
+    const res = await fetch(`${API_URL}admin/link-student-parent/?${params}`, {
+      method: 'POST',
+      headers,
+    });
+    if (res.ok) {
+      showMsg('Student linked to parent successfully');
+      setLinkStudentId('');
+      setLinkParentEmail('');
+      fetchUnassignedStudents();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      showMsg(err.detail || 'Linking failed', 'error');
+    }
+  };
+
   const navLinks = [
+    { label: 'Home', onClick: () => setTab('home') },
     { label: 'Classes', onClick: () => setTab('classes') },
     { label: 'Subjects', onClick: () => setTab('subjects') },
     { label: 'Teachers', onClick: () => setTab('teachers') },
+    { label: 'Parents', onClick: () => setTab('parents') },
     { label: 'Assign', onClick: () => setTab('assign') },
+    { label: 'Link Parent', onClick: () => setTab('link') },
     { label: 'Stats', onClick: () => setTab('stats') },
   ];
 
   return (
     <Layout role="admin" navLinks={navLinks}>
       <div className="mb-8 animate-fade-in-up">
-        <h1 className="text-3xl md:text-4xl font-black text-gray-900 flex items-center gap-3">
+        <h1 className="text-3xl md:text-4xl font-black text-gray-900 dark:text-white flex items-center gap-3">
           <span className="text-4xl">⚙️</span> Admin Dashboard
         </h1>
-        <p className="text-gray-500 mt-2 text-lg">Manage classes, subjects, teachers, and view system stats.</p>
+        <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg">Manage classes, subjects, teachers, parents, and view system stats.</p>
       </div>
 
       {msg && (
         <div className={`px-4 py-3 rounded-xl mb-6 text-sm font-medium animate-fade-in-up flex items-center gap-2 ${
-          msgType === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'
+          msgType === 'error' ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800' : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
         }`}>
           {msgType === 'error' ? '⚠️' : '✅'} {msg}
+        </div>
+      )}
+
+      {/* ===== HOME TAB ===== */}
+      {tab === 'home' && (
+        <div className="space-y-8 animate-fade-in-up">
+          {/* Main stat cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: 'Classes', value: stats.classes, icon: '🏫', color: 'from-blue-600 to-indigo-600' },
+              { label: 'Students', value: stats.students, icon: '🎓', color: 'from-emerald-500 to-teal-600' },
+              { label: 'Teachers', value: stats.teachers, icon: '👩‍🏫', color: 'from-purple-600 to-violet-600' },
+              { label: 'Materials', value: stats.materials, icon: '📚', color: 'from-orange-500 to-amber-600' },
+            ].map(({ label, value, icon, color }) => (
+              <div key={label} className={`bg-gradient-to-br ${color} rounded-2xl p-5 shadow-xl text-white`}>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-semibold opacity-90">{label}</p>
+                  <span className="text-2xl">{icon}</span>
+                </div>
+                <p className="text-3xl md:text-4xl font-black">{value ?? 0}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Secondary stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 text-center">
+              <p className="text-sm text-gray-500 dark:text-gray-400">Subjects</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{subjects.length}</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 text-center">
+              <p className="text-sm text-gray-500 dark:text-gray-400">Parents</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{parents.length}</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 text-center">
+              <p className="text-sm text-gray-500 dark:text-gray-400">Assignments</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{assignmentsList.length}</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 text-center">
+              <p className="text-sm text-gray-500 dark:text-gray-400">Unassigned</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{unassignedStudents.length}</p>
+            </div>
+          </div>
+
+          {/* Recent Assignments */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Recent Assignments</h3>
+            {assignmentsList.length === 0 ? (
+              <p className="text-gray-400 dark:text-gray-500 text-sm">No assignments yet.</p>
+            ) : (
+              <ul className="space-y-3">
+                {assignmentsList.slice(0, 5).map(a => (
+                  <li key={a.id} className="flex items-center justify-between">
+                    <span className="font-medium text-gray-800 dark:text-gray-200">
+                      {a.classes?.name || 'Class'} – {a.subjects?.name || 'Subject'}
+                    </span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{a.profiles?.full_name || 'Teacher'}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
 
       {/* ---- Classes Tab ---- */}
       {tab === 'classes' && (
         <div className="space-y-8 animate-fade-in-up">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-xl">🏫</div>
-              <h2 className="text-xl font-bold text-gray-900">Create New Class</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Create New Class</h2>
             </div>
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Class name *</label>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Class name *</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -203,12 +332,12 @@ export default function AdminDashboard() {
                     placeholder="e.g. Grade 5A"
                     value={newClassName}
                     onChange={(e) => setNewClassName(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all duration-200 bg-white/80 placeholder-gray-400"
+                    className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
                   />
                 </div>
               </div>
               <div className="flex-1">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Grade (optional)</label>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Grade (optional)</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -220,7 +349,7 @@ export default function AdminDashboard() {
                     placeholder="e.g. Grade 5"
                     value={newClassGrade}
                     onChange={(e) => setNewClassGrade(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all duration-200 bg-white/80 placeholder-gray-400"
+                    className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
                   />
                 </div>
               </div>
@@ -237,21 +366,21 @@ export default function AdminDashboard() {
 
           <div>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center text-xl">📋</div>
-              <h2 className="text-xl font-bold text-gray-900">Existing Classes</h2>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 flex items-center justify-center text-xl">📋</div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Existing Classes</h2>
             </div>
             {classes.length === 0 ? (
-              <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">
+              <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-300 dark:border-gray-600">
                 <span className="text-5xl">📭</span>
-                <p className="text-gray-400 mt-4 text-lg">No classes created yet.</p>
+                <p className="text-gray-400 dark:text-gray-500 mt-4 text-lg">No classes created yet.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {classes.map(c => (
-                  <div key={c.id} className="group bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 flex items-center justify-between">
+                  <div key={c.id} className="group bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 hover:shadow-xl hover:scale-[1.02] transition-all duration-300 flex items-center justify-between">
                     <div>
-                      <h3 className="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">{c.name}</h3>
-                      {c.grade && <p className="text-sm text-gray-500 mt-1">{c.grade}</p>}
+                      <h3 className="font-bold text-gray-800 dark:text-gray-200 group-hover:text-blue-600 transition-colors">{c.name}</h3>
+                      {c.grade && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{c.grade}</p>}
                     </div>
                     <button
                       onClick={() => deleteClass(c.id)}
@@ -270,14 +399,14 @@ export default function AdminDashboard() {
       {/* ---- Subjects Tab ---- */}
       {tab === 'subjects' && (
         <div className="space-y-8 animate-fade-in-up">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-xl">📖</div>
-              <h2 className="text-xl font-bold text-gray-900">Add Subject</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Add Subject</h2>
             </div>
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Subject name *</label>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Subject name *</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -289,7 +418,7 @@ export default function AdminDashboard() {
                     placeholder="e.g. Mathematics"
                     value={newSubjectName}
                     onChange={(e) => setNewSubjectName(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-300 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 outline-none transition-all duration-200 bg-white/80 placeholder-gray-400"
+                    className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 dark:focus:ring-emerald-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
                   />
                 </div>
               </div>
@@ -306,20 +435,20 @@ export default function AdminDashboard() {
 
           <div>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center text-xl">📚</div>
-              <h2 className="text-xl font-bold text-gray-900">All Subjects</h2>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex items-center justify-center text-xl">📚</div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">All Subjects</h2>
             </div>
             {subjects.length === 0 ? (
-              <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">
+              <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-300 dark:border-gray-600">
                 <span className="text-5xl">📭</span>
-                <p className="text-gray-400 mt-4 text-lg">No subjects added yet.</p>
+                <p className="text-gray-400 dark:text-gray-500 mt-4 text-lg">No subjects added yet.</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {subjects.map(s => (
-                  <div key={s.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center hover:shadow-md hover:scale-105 transition-all duration-300">
+                  <div key={s.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 text-center hover:shadow-md hover:scale-105 transition-all duration-300">
                     <span className="text-3xl">📘</span>
-                    <p className="font-semibold mt-2 text-gray-800">{s.name}</p>
+                    <p className="font-semibold mt-2 text-gray-800 dark:text-gray-200">{s.name}</p>
                   </div>
                 ))}
               </div>
@@ -331,14 +460,14 @@ export default function AdminDashboard() {
       {/* ---- Teachers Tab ---- */}
       {tab === 'teachers' && (
         <div className="space-y-8 animate-fade-in-up">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-violet-600 flex items-center justify-center text-white text-xl">👩‍🏫</div>
-              <h2 className="text-xl font-bold text-gray-900">Create Teacher Account</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Create Teacher Account</h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Full name *</label>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Full name *</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -350,12 +479,12 @@ export default function AdminDashboard() {
                     placeholder="e.g. Mr. Banda"
                     value={newTeacherName}
                     onChange={(e) => setNewTeacherName(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-300 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all duration-200 bg-white/80 placeholder-gray-400"
+                    className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 dark:focus:ring-purple-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Email *</label>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Email *</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -367,12 +496,12 @@ export default function AdminDashboard() {
                     placeholder="teacher@school.com"
                     value={newTeacherEmail}
                     onChange={(e) => setNewTeacherEmail(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-300 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all duration-200 bg-white/80 placeholder-gray-400"
+                    className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 dark:focus:ring-purple-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Password *</label>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Password *</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -384,7 +513,7 @@ export default function AdminDashboard() {
                     placeholder="Min. 6 characters"
                     value={newTeacherPass}
                     onChange={(e) => setNewTeacherPass(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-300 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 outline-none transition-all duration-200 bg-white/80 placeholder-gray-400"
+                    className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 dark:focus:ring-purple-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
                   />
                 </div>
               </div>
@@ -399,24 +528,101 @@ export default function AdminDashboard() {
 
           <div>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-100 to-violet-100 flex items-center justify-center text-xl">👥</div>
-              <h2 className="text-xl font-bold text-gray-900">Current Teachers</h2>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-100 to-violet-100 dark:from-purple-900/30 dark:to-violet-900/30 flex items-center justify-center text-xl">👥</div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Current Teachers</h2>
             </div>
             {teachers.length === 0 ? (
-              <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">
+              <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-300 dark:border-gray-600">
                 <span className="text-5xl">📭</span>
-                <p className="text-gray-400 mt-4 text-lg">No teachers created yet.</p>
+                <p className="text-gray-400 dark:text-gray-500 mt-4 text-lg">No teachers created yet.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {teachers.map(t => (
-                  <div key={t.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex items-center gap-4 hover:shadow-md transition-all duration-300">
+                  <div key={t.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 flex items-center gap-4 hover:shadow-md transition-all duration-300">
                     <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-violet-500 flex items-center justify-center font-bold text-white text-lg">
                       {t.full_name?.charAt(0) || 'T'}
                     </div>
                     <div>
-                      <p className="font-semibold text-gray-800">{t.full_name}</p>
-                      <p className="text-sm text-gray-500">{t.id?.slice(0, 8)}...</p>
+                      <p className="font-semibold text-gray-800 dark:text-gray-200">{t.full_name}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{t.id?.slice(0, 8)}...</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ---- Parents Tab ---- */}
+      {tab === 'parents' && (
+        <div className="space-y-8 animate-fade-in-up">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-xl">👨‍👩‍👧</div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Create Parent Account</h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Full name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Mrs. Phiri"
+                  value={newParentName}
+                  onChange={(e) => setNewParentName(e.target.value)}
+                  className="w-full pl-4 pr-4 py-3 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100 dark:focus:ring-cyan-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Email *</label>
+                <input
+                  type="email"
+                  placeholder="parent@school.com"
+                  value={newParentEmail}
+                  onChange={(e) => setNewParentEmail(e.target.value)}
+                  className="w-full pl-4 pr-4 py-3 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100 dark:focus:ring-cyan-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Password *</label>
+                <input
+                  type="password"
+                  placeholder="Min. 6 characters"
+                  value={newParentPass}
+                  onChange={(e) => setNewParentPass(e.target.value)}
+                  className="w-full pl-4 pr-4 py-3 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-cyan-500 focus:ring-4 focus:ring-cyan-100 dark:focus:ring-cyan-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
+                />
+              </div>
+            </div>
+            <button
+              onClick={() => { playClick(); addParent(); }}
+              className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-bold px-8 py-3 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] active:scale-95"
+            >
+              Create Parent
+            </button>
+          </div>
+
+          <div>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-100 to-blue-100 dark:from-cyan-900/30 dark:to-blue-900/30 flex items-center justify-center text-xl">👥</div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Current Parents</h2>
+            </div>
+            {parents.length === 0 ? (
+              <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-300 dark:border-gray-600">
+                <span className="text-5xl">📭</span>
+                <p className="text-gray-400 dark:text-gray-500 mt-4 text-lg">No parents created yet.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {parents.map(p => (
+                  <div key={p.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 flex items-center gap-4 hover:shadow-md transition-all duration-300">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center font-bold text-white text-lg">
+                      {p.full_name?.charAt(0) || 'P'}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800 dark:text-gray-200">{p.full_name}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{p.id?.slice(0, 8)}...</p>
                     </div>
                   </div>
                 ))}
@@ -429,40 +635,40 @@ export default function AdminDashboard() {
       {/* ---- Assign Tab ---- */}
       {tab === 'assign' && (
         <div className="space-y-8 animate-fade-in-up">
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center text-white text-xl">🔗</div>
-              <h2 className="text-xl font-bold text-gray-900">Assign Teacher to Class</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Assign Teacher to Class</h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Class</label>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Class</label>
                 <select
                   value={assignClassId}
                   onChange={(e) => setAssignClassId(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl border border-gray-300 focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none transition-all duration-200 bg-white/80"
+                  className="w-full px-4 py-3 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-orange-500 focus:ring-4 focus:ring-orange-100 dark:focus:ring-orange-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 >
                   <option value="">Select class</option>
                   {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Teacher</label>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Teacher</label>
                 <select
                   value={assignTeacherId}
                   onChange={(e) => setAssignTeacherId(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl border border-gray-300 focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none transition-all duration-200 bg-white/80"
+                  className="w-full px-4 py-3 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-orange-500 focus:ring-4 focus:ring-orange-100 dark:focus:ring-orange-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 >
                   <option value="">Select teacher</option>
                   {teachers.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Subject</label>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Subject</label>
                 <select
                   value={assignSubjectId}
                   onChange={(e) => setAssignSubjectId(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl border border-gray-300 focus:border-orange-500 focus:ring-4 focus:ring-orange-100 outline-none transition-all duration-200 bg-white/80"
+                  className="w-full px-4 py-3 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-orange-500 focus:ring-4 focus:ring-orange-100 dark:focus:ring-orange-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 >
                   <option value="">Select subject</option>
                   {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -479,40 +685,40 @@ export default function AdminDashboard() {
 
           <div>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-100 to-amber-100 flex items-center justify-center text-xl">📊</div>
-              <h2 className="text-xl font-bold text-gray-900">Current Assignments</h2>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-100 to-amber-100 dark:from-orange-900/30 dark:to-amber-900/30 flex items-center justify-center text-xl">📊</div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Current Assignments</h2>
             </div>
             {assignmentsList.length === 0 ? (
-              <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-300">
+              <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-2xl border border-dashed border-gray-300 dark:border-gray-600">
                 <span className="text-5xl">📭</span>
-                <p className="text-gray-400 mt-4 text-lg">No assignments yet.</p>
+                <p className="text-gray-400 dark:text-gray-500 mt-4 text-lg">No assignments yet.</p>
               </div>
             ) : (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead>
-                      <tr className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
-                        <th className="px-6 py-4 text-sm font-bold text-gray-700 uppercase tracking-wider">Class</th>
-                        <th className="px-6 py-4 text-sm font-bold text-gray-700 uppercase tracking-wider">Teacher</th>
-                        <th className="px-6 py-4 text-sm font-bold text-gray-700 uppercase tracking-wider">Subject</th>
+                      <tr className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 border-b border-gray-200 dark:border-gray-700">
+                        <th className="px-6 py-4 text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Class</th>
+                        <th className="px-6 py-4 text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Teacher</th>
+                        <th className="px-6 py-4 text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Subject</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                       {assignmentsList.map((a, index) => (
-                        <tr key={a.id} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                        <tr key={a.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${index % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50/30 dark:bg-gray-800/50'}`}>
                           <td className="px-6 py-4">
-                            <span className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-semibold">
+                            <span className="inline-flex items-center gap-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-sm font-semibold">
                               <span>🏫</span> {a.classes?.name || 'Unknown'}
                             </span>
                           </td>
                           <td className="px-6 py-4">
-                            <span className="inline-flex items-center gap-2 bg-purple-50 text-purple-700 px-3 py-1 rounded-full text-sm font-semibold">
+                            <span className="inline-flex items-center gap-2 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-3 py-1 rounded-full text-sm font-semibold">
                               <span>👩‍🏫</span> {a.profiles?.full_name || 'Teacher'}
                             </span>
                           </td>
                           <td className="px-6 py-4">
-                            <span className="inline-flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
+                            <span className="inline-flex items-center gap-2 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-3 py-1 rounded-full text-sm font-semibold">
                               <span>📘</span> {a.subjects?.name || 'Subject'}
                             </span>
                           </td>
@@ -527,12 +733,57 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* ---- Link Parent Tab ---- */}
+      {tab === 'link' && (
+        <div className="space-y-8 animate-fade-in-up">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white text-xl">👨‍👩‍👧</div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Link Student to Parent</h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Student</label>
+                <select
+                  value={linkStudentId}
+                  onChange={(e) => setLinkStudentId(e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-pink-500 focus:ring-4 focus:ring-pink-100 dark:focus:ring-pink-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                >
+                  <option value="">Select student</option>
+                  {unassignedStudents.map(s => (
+                    <option key={s.id} value={s.id}>{s.display_name} ({s.student_number})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Parent Email</label>
+                <input
+                  type="email"
+                  placeholder="parent@example.com"
+                  value={linkParentEmail}
+                  onChange={(e) => setLinkParentEmail(e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-pink-500 focus:ring-4 focus:ring-pink-100 dark:focus:ring-pink-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={() => { playClick(); handleLinkParent(); }}
+                  className="bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white font-bold px-8 py-3 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] active:scale-95"
+                >
+                  Link
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ---- Stats Tab ---- */}
       {tab === 'stats' && (
         <div className="space-y-8 animate-fade-in-up">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center text-white text-xl">📈</div>
-            <h2 className="text-xl font-bold text-gray-900">System Overview</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">System Overview</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             {[

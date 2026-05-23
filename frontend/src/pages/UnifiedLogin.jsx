@@ -44,12 +44,12 @@ export default function UnifiedLogin() {
 
   const resetError = () => setError('');
 
-  // Enhanced eye toggle icon (crisp SVG)
+  // Eye toggle icon
   const ToggleIcon = ({ show, onClick }) => (
     <button
       type="button"
       onClick={onClick}
-      className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+      className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
     >
       {show ? (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -64,26 +64,27 @@ export default function UnifiedLogin() {
     </button>
   );
 
-  // Input field icons (SVG)
+  // Icons
   const EmailIcon = () => (
-    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+    <svg className="w-5 h-5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
     </svg>
   );
 
   const LockIcon = () => (
-    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+    <svg className="w-5 h-5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
     </svg>
   );
 
   const UserIcon = () => (
-    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+    <svg className="w-5 h-5 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
     </svg>
   );
 
   /* ================= LOGIN HANDLERS ================= */
+  // (identical to your existing code – no changes needed)
   const handleTeacherLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -179,15 +180,19 @@ export default function UnifiedLogin() {
     ];
 
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 p-4 sm:p-6 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-80 h-80 bg-blue-200 rounded-full blur-3xl opacity-30 animate-float-left pointer-events-none" />
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-200 rounded-full blur-3xl opacity-30 animate-float-right pointer-events-none" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-4 sm:p-6 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-80 h-80 bg-blue-200 dark:bg-blue-900/40 rounded-full blur-3xl opacity-30 dark:opacity-20 animate-float-left pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-200 dark:bg-purple-900/40 rounded-full blur-3xl opacity-30 dark:opacity-20 animate-float-right pointer-events-none" />
 
-        <div className="w-full max-w-5xl max-w-[100%] bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-gray-100 animate-fade-in-up z-10">
+        <div className="w-full max-w-5xl max-w-[100%] bg-white dark:bg-gray-800 rounded-[2.5rem] shadow-2xl overflow-hidden border border-gray-100 dark:border-gray-700 animate-fade-in-up z-10">
           <div className="grid lg:grid-cols-2">
+            {/* Left Panel – Branding */}
             <div className="hidden lg:flex flex-col justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white p-12 relative overflow-hidden">
               <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLW9wYWNpdHk9Ii4wNSI+PHBhdGggZD0iTS41LjVIMTkuNXYxOUguNXoiLz48cGF0aCBkPSJNNiA2aDh2OEg2eiIvPjwvZz48L2c+PC9zdmc+')] opacity-20" />
-              <div className="relative z-10">
+              <div className="relative z-10 text-center">
+                <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-blue-200 shadow-md mx-auto mb-4">
+                  <img src="/logo.jpg" alt="Dayspring Hub Logo" className="w-full h-full object-cover" />
+                </div>
                 <h1 className="text-5xl font-black leading-tight mb-6">
                   Welcome to
                   <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">
@@ -203,13 +208,16 @@ export default function UnifiedLogin() {
               </div>
             </div>
 
+            {/* Right Panel – Role Selection */}
             <div className="p-6 sm:p-8 md:p-12 animate-fade-in-right">
-              <div className="lg:hidden mb-8 text-center">
-                <h1 className="text-3xl font-black text-gray-900">Dayspring <span className="text-blue-600">Hub</span></h1>
-                <p className="text-sm text-gray-500 mt-2">A unified learning platform</p>
+              {/* Logo for small screens */}
+              <div className="lg:hidden flex justify-center mb-6">
+                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-blue-200 shadow-md">
+                  <img src="/logo.jpg" alt="Dayspring Hub Logo" className="w-full h-full object-cover" />
+                </div>
               </div>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 text-center mb-2">Choose Your Role</h2>
-              <p className="text-gray-500 text-center mb-8 sm:mb-10">Select your portal to continue</p>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 dark:text-white text-center mb-2">Choose Your Role</h2>
+              <p className="text-gray-500 dark:text-gray-400 text-center mb-8 sm:mb-10">Select your portal to continue</p>
               <div className="space-y-4">
                 {roles.map((r) => (
                   <button
@@ -224,7 +232,7 @@ export default function UnifiedLogin() {
                   </button>
                 ))}
               </div>
-              <button onClick={() => navigate('/')} className="mt-8 text-sm text-gray-500 hover:text-gray-800 w-full transition-colors">← Back to Home</button>
+              <button onClick={() => navigate('/')} className="mt-8 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white w-full transition-colors">← Back to Home</button>
             </div>
           </div>
         </div>
@@ -232,67 +240,43 @@ export default function UnifiedLogin() {
     );
   }
 
-  /* ================= LOGIN FORM (REFINED) ================= */
+  /* ================= LOGIN FORM ================= */
   const roleConfig = {
-    teacher: {
-      gradient: 'from-blue-600 to-indigo-600',
-      accent: 'blue',
-      title: 'Teacher Login',
-      icon: '👩‍🏫',
-      ringColor: 'focus:ring-blue-200',
-      borderColor: 'focus:border-blue-500',
-    },
-    student: {
-      gradient: 'from-emerald-500 to-teal-600',
-      accent: 'emerald',
-      title: 'Student Login',
-      icon: '🎓',
-      ringColor: 'focus:ring-emerald-200',
-      borderColor: 'focus:border-emerald-500',
-    },
-    parent: {
-      gradient: 'from-purple-600 to-violet-600',
-      accent: 'purple',
-      title: 'Parent Login',
-      icon: '👨‍👩‍👧',
-      ringColor: 'focus:ring-purple-200',
-      borderColor: 'focus:border-purple-500',
-    },
-    admin: {
-      gradient: 'from-red-500 to-rose-600',
-      accent: 'rose',
-      title: 'Admin Login',
-      icon: '⚙️',
-      ringColor: 'focus:ring-rose-200',
-      borderColor: 'focus:border-rose-500',
-    },
+    teacher: { gradient: 'from-blue-600 to-indigo-600', accent: 'blue', title: 'Teacher Login', icon: '👩‍🏫', ringColor: 'focus:ring-blue-200', borderColor: 'focus:border-blue-500' },
+    student: { gradient: 'from-emerald-500 to-teal-600', accent: 'emerald', title: 'Student Login', icon: '🎓', ringColor: 'focus:ring-emerald-200', borderColor: 'focus:border-emerald-500' },
+    parent: { gradient: 'from-purple-600 to-violet-600', accent: 'purple', title: 'Parent Login', icon: '👨‍👩‍👧', ringColor: 'focus:ring-purple-200', borderColor: 'focus:border-purple-500' },
+    admin: { gradient: 'from-red-500 to-rose-600', accent: 'rose', title: 'Admin Login', icon: '⚙️', ringColor: 'focus:ring-rose-200', borderColor: 'focus:border-rose-500' },
   };
 
   const currentRole = roleConfig[role];
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 p-4 sm:p-6 relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-80 h-80 bg-blue-200 rounded-full blur-3xl opacity-30 animate-float-left pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-200 rounded-full blur-3xl opacity-30 animate-float-right pointer-events-none" />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-4 sm:p-6 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-80 h-80 bg-blue-200 dark:bg-blue-900/40 rounded-full blur-3xl opacity-30 dark:opacity-20 animate-float-left pointer-events-none" />
+      <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-200 dark:bg-purple-900/40 rounded-full blur-3xl opacity-30 dark:opacity-20 animate-float-right pointer-events-none" />
 
       <div className="w-full max-w-md max-w-[100%] relative z-10 animate-fade-in-up">
-        {/* Card with subtle glow border */}
         <div className="relative group">
           <div className={`absolute inset-0 bg-gradient-to-r ${currentRole.gradient} rounded-[2.5rem] blur opacity-20 group-hover:opacity-30 transition duration-500`}></div>
-          <div className="relative bg-white/90 backdrop-blur-sm rounded-[2.5rem] shadow-2xl border border-white/60 overflow-hidden min-h-[560px]">
+          <div className="relative bg-white dark:bg-gray-800 backdrop-blur-sm rounded-[2.5rem] shadow-2xl border border-white/60 dark:border-gray-700 overflow-hidden min-h-[560px]">
             {/* Header */}
             <div className={`bg-gradient-to-r ${currentRole.gradient} px-8 py-8 text-white`}>
-              <h2 className="text-3xl font-black flex items-center gap-3">
+              <div className="flex justify-center mb-4">
+                <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-white/30 shadow-md">
+                  <img src="/logo.jpg" alt="Dayspring Hub Logo" className="w-full h-full object-cover" />
+                </div>
+              </div>
+              <h2 className="text-3xl font-black flex items-center gap-3 justify-center">
                 <span className="text-4xl">{currentRole.icon}</span>
                 {currentRole.title}
               </h2>
-              <p className="mt-2 text-white/80 text-sm">Enter your credentials to continue</p>
+              <p className="mt-2 text-white/80 text-sm text-center">Enter your credentials to continue</p>
             </div>
 
             {/* Form body */}
             <div className="p-8 flex flex-col justify-center flex-grow">
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm mb-6 flex items-center gap-2 animate-fade-in-up">
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded-xl text-sm mb-6 flex items-center gap-2 animate-fade-in-up">
                   <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -310,7 +294,7 @@ export default function UnifiedLogin() {
                 {role === 'teacher' && (
                   <>
                     <div className="relative">
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Email</label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                           <EmailIcon />
@@ -320,13 +304,13 @@ export default function UnifiedLogin() {
                           value={teacherEmail}
                           onChange={(e) => setTeacherEmail(e.target.value)}
                           required
-                          className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border border-gray-300 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white/80 placeholder-gray-400`}
+                          className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border border-gray-300 dark:border-gray-600 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500`}
                           placeholder="teacher@school.com"
                         />
                       </div>
                     </div>
                     <div className="relative">
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Password</label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                           <LockIcon />
@@ -336,7 +320,7 @@ export default function UnifiedLogin() {
                           value={teacherPassword}
                           onChange={(e) => setTeacherPassword(e.target.value)}
                           required
-                          className={`w-full pl-12 pr-12 py-3.5 rounded-2xl border border-gray-300 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white/80 placeholder-gray-400`}
+                          className={`w-full pl-12 pr-12 py-3.5 rounded-2xl border border-gray-300 dark:border-gray-600 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500`}
                           placeholder="••••••••"
                         />
                         <ToggleIcon show={showTeacherPass} onClick={() => setShowTeacherPass(!showTeacherPass)} />
@@ -349,7 +333,7 @@ export default function UnifiedLogin() {
                 {role === 'student' && (
                   <>
                     <div className="relative">
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Student Number</label>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Student Number</label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                           <UserIcon />
@@ -358,13 +342,13 @@ export default function UnifiedLogin() {
                           value={studentNumber}
                           onChange={(e) => setStudentNumber(e.target.value)}
                           required
-                          className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border border-gray-300 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white/80 placeholder-gray-400`}
+                          className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border border-gray-300 dark:border-gray-600 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500`}
                           placeholder="e.g. STU12345"
                         />
                       </div>
                     </div>
                     <div className="relative">
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Password</label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                           <LockIcon />
@@ -374,7 +358,7 @@ export default function UnifiedLogin() {
                           value={studentPassword}
                           onChange={(e) => setStudentPassword(e.target.value)}
                           required
-                          className={`w-full pl-12 pr-12 py-3.5 rounded-2xl border border-gray-300 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white/80 placeholder-gray-400`}
+                          className={`w-full pl-12 pr-12 py-3.5 rounded-2xl border border-gray-300 dark:border-gray-600 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500`}
                           placeholder="••••••••"
                         />
                         <ToggleIcon show={showStudentPass} onClick={() => setShowStudentPass(!showStudentPass)} />
@@ -387,7 +371,7 @@ export default function UnifiedLogin() {
                 {role === 'parent' && (
                   <>
                     <div className="relative">
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Email</label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                           <EmailIcon />
@@ -397,13 +381,13 @@ export default function UnifiedLogin() {
                           value={parentEmail}
                           onChange={(e) => setParentEmail(e.target.value)}
                           required
-                          className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border border-gray-300 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white/80 placeholder-gray-400`}
+                          className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border border-gray-300 dark:border-gray-600 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500`}
                           placeholder="parent@example.com"
                         />
                       </div>
                     </div>
                     <div className="relative">
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Password</label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                           <LockIcon />
@@ -413,7 +397,7 @@ export default function UnifiedLogin() {
                           value={parentPassword}
                           onChange={(e) => setParentPassword(e.target.value)}
                           required
-                          className={`w-full pl-12 pr-12 py-3.5 rounded-2xl border border-gray-300 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white/80 placeholder-gray-400`}
+                          className={`w-full pl-12 pr-12 py-3.5 rounded-2xl border border-gray-300 dark:border-gray-600 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500`}
                           placeholder="••••••••"
                         />
                         <ToggleIcon show={showParentPass} onClick={() => setShowParentPass(!showParentPass)} />
@@ -426,7 +410,7 @@ export default function UnifiedLogin() {
                 {role === 'admin' && (
                   <>
                     <div className="relative">
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Admin Email</label>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Admin Email</label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                           <EmailIcon />
@@ -436,13 +420,13 @@ export default function UnifiedLogin() {
                           value={adminEmail}
                           onChange={(e) => setAdminEmail(e.target.value)}
                           required
-                          className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border border-gray-300 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white/80 placeholder-gray-400`}
+                          className={`w-full pl-12 pr-4 py-3.5 rounded-2xl border border-gray-300 dark:border-gray-600 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500`}
                           placeholder="admin@school.com"
                         />
                       </div>
                     </div>
                     <div className="relative">
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Password</label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                           <LockIcon />
@@ -452,7 +436,7 @@ export default function UnifiedLogin() {
                           value={adminPassword}
                           onChange={(e) => setAdminPassword(e.target.value)}
                           required
-                          className={`w-full pl-12 pr-12 py-3.5 rounded-2xl border border-gray-300 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white/80 placeholder-gray-400`}
+                          className={`w-full pl-12 pr-12 py-3.5 rounded-2xl border border-gray-300 dark:border-gray-600 ${currentRole.borderColor} ${currentRole.ringColor} focus:ring-4 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500`}
                           placeholder="••••••••"
                         />
                         <ToggleIcon show={showAdminPass} onClick={() => setShowAdminPass(!showAdminPass)} />
@@ -461,7 +445,7 @@ export default function UnifiedLogin() {
                   </>
                 )}
 
-                {/* Submit button with glow */}
+                {/* Submit button */}
                 <button
                   type="submit"
                   disabled={loading}
@@ -488,7 +472,7 @@ export default function UnifiedLogin() {
                 <button
                   type="button"
                   onClick={() => { setRole(null); resetError(); }}
-                  className="text-sm text-gray-500 hover:text-gray-800 transition-colors inline-flex items-center gap-1"
+                  className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors inline-flex items-center gap-1"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
