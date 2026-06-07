@@ -1,17 +1,31 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { useNotifications } from '../context/NotificationContext';   // new
+import { useNotifications } from '../context/NotificationContext';
 import { useNavigate } from 'react-router-dom';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://dayspring-hub.onrender.com/api/v1/';
 
 const EMOJI_LIST = ['🐼', '📄', '▶️', '🎨', '✏️', '📖', '🌍', '🧮', '🔬', '🎵', '🐱', '🚀', '🍎', '🌈', '🎲', '📚'];
 
+// Click sound hook – fails silently if file missing
+const useClickSound = () => {
+  const audioRef = useRef(null);
+  if (!audioRef.current) {
+    audioRef.current = new Audio('/sounds/click.mp3');
+    audioRef.current.volume = 0.2;
+  }
+  return useCallback(() => {
+    audioRef.current?.play().catch(() => {});
+  }, []);
+};
+
 export default function TeacherDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { updateNotifications } = useNotifications();   // new
+  const { updateNotifications } = useNotifications();
+  const playClick = useClickSound();                    // <-- added click sound
+
   const [tab, setTab] = useState('home');
 
   const [myClasses, setMyClasses] = useState([]);
@@ -127,6 +141,7 @@ export default function TeacherDashboard() {
     setTimeout(() => setMsg(''), 3000);
   };
 
+  // ✅ Upload material – now shows server error details
   const handleUploadMaterial = async (e) => {
     e.preventDefault();
     const formData = new FormData();
@@ -147,7 +162,10 @@ export default function TeacherDashboard() {
       showMsg('Material uploaded');
       setMatTitle(''); setMatDesc(''); setMatFile(null); setMatAudio(null); setMatIcon('📚');
       fetchData();
-    } else showMsg('Upload failed', 'error');
+    } else {
+      const err = await res.json().catch(() => ({}));
+      showMsg(err.detail || 'Upload failed', 'error');
+    }
   };
 
   const deleteMaterial = async (id) => {
@@ -159,6 +177,7 @@ export default function TeacherDashboard() {
     fetchData();
   };
 
+  // ✅ Create assignment – now shows server error details
   const handleCreateAssignment = async (e) => {
     e.preventDefault();
     const formData = new FormData();
@@ -179,7 +198,10 @@ export default function TeacherDashboard() {
       showMsg('Assignment created');
       setAssTitle(''); setAssDesc(''); setAssDeadline(''); setAssFile(null); setAssAudio(null); setAssIcon('📝');
       fetchData();
-    } else showMsg('Creation failed', 'error');
+    } else {
+      const err = await res.json().catch(() => ({}));
+      showMsg(err.detail || 'Creation failed', 'error');
+    }
   };
 
   const deleteAssignment = async (id) => {
@@ -191,7 +213,6 @@ export default function TeacherDashboard() {
     fetchData();
   };
 
-  // UPDATED: viewSubmissions now also feeds notification badges
   const viewSubmissions = async (assignmentId) => {
     const res = await fetch(`${API_URL}submissions/${assignmentId}/`, {
       headers: { Authorization: `Bearer ${user.access_token}` }
@@ -205,8 +226,6 @@ export default function TeacherDashboard() {
         initial[s.id] = { grade: s.grade || '', feedback: s.feedback || '' };
       });
       setGrades(initial);
-
-      // Notification badge: treat submission time as created_at for new submissions
       const newSubs = subs.map(s => ({ ...s, created_at: s.submitted_at }));
       updateNotifications('teacher', newSubs, 'submissions');
     }
@@ -222,13 +241,11 @@ export default function TeacherDashboard() {
       headers: { Authorization: `Bearer ${user.access_token}` },
       body: formData,
     });
-    if (res.ok) {
-      showMsg('Grade saved');
-    } else {
-      showMsg('Failed to save grade', 'error');
-    }
+    if (res.ok) showMsg('Grade saved');
+    else showMsg('Failed to save grade', 'error');
   };
 
+  // ✅ Post announcement – now sends class_id
   const handlePostAnnouncement = async (e) => {
     e.preventDefault();
     const res = await fetch(`${API_URL}announcements/`, {
@@ -236,8 +253,14 @@ export default function TeacherDashboard() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.access_token}` },
       body: JSON.stringify({ title: annTitle, content: annContent, class_id: selectedClassId }),
     });
-    if (res.ok) { showMsg('Announcement posted'); setAnnTitle(''); setAnnContent(''); fetchData(); }
-    else showMsg('Failed', 'error');
+    if (res.ok) {
+      showMsg('Announcement posted');
+      setAnnTitle(''); setAnnContent('');
+      fetchData();
+    } else {
+      const err = await res.json().catch(() => ({}));
+      showMsg(err.detail || 'Failed', 'error');
+    }
   };
 
   const handleAddStudent = async (e) => {
@@ -252,8 +275,11 @@ export default function TeacherDashboard() {
         class_id: selectedClassId
       }),
     });
-    if (res.ok) { showMsg('Student added'); setNewStudentNumber(''); setNewStudentName(''); setNewStudentPass(''); fetchData(); }
-    else showMsg('Failed to add student', 'error');
+    if (res.ok) {
+      showMsg('Student added');
+      setNewStudentNumber(''); setNewStudentName(''); setNewStudentPass('');
+      fetchData();
+    } else showMsg('Failed to add student', 'error');
   };
 
   const selectedClassName = myClasses.find(c => c.id === selectedClassId)?.name || 'Unknown';
@@ -310,7 +336,6 @@ export default function TeacherDashboard() {
       {/* ===== HOME TAB ===== */}
       {tab === 'home' && (
         <div className="space-y-8 animate-fade-in-up">
-          {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
               { label: 'Students', value: totalStudents, icon: '👩‍🎓', color: 'from-blue-600 to-indigo-600' },
@@ -329,11 +354,8 @@ export default function TeacherDashboard() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Upcoming Deadlines */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                <span>📅</span> Upcoming Deadlines
-              </h3>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><span>📅</span> Upcoming Deadlines</h3>
               {upcomingDeadlines.length === 0 ? (
                 <p className="text-gray-400 dark:text-gray-500 text-sm">No upcoming deadlines.</p>
               ) : (
@@ -347,12 +369,8 @@ export default function TeacherDashboard() {
                 </ul>
               )}
             </div>
-
-            {/* Recent Announcements */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                <span>📢</span> Recent Announcements
-              </h3>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><span>📢</span> Recent Announcements</h3>
               {recentAnnouncements.length === 0 ? (
                 <p className="text-gray-400 dark:text-gray-500 text-sm">No announcements yet.</p>
               ) : (
@@ -373,7 +391,6 @@ export default function TeacherDashboard() {
       {/* Materials Tab */}
       {tab === 'materials' && (
         <div className="space-y-8 animate-fade-in-up">
-          {/* Upload Material Card */}
           <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-2xl shadow-lg">📚</div>
@@ -400,9 +417,10 @@ export default function TeacherDashboard() {
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Type</label>
                   <select value={matType} onChange={(e) => setMatType(e.target.value)}
                     className="w-full px-4 py-3.5 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                    <option value="pdf">PDF</option>
+                    <option value="pdf">Document</option>
                     <option value="video">Video</option>
                     <option value="image">Image</option>
+                    <option value="audio">Audio</option>
                     <option value="link">Link</option>
                   </select>
                 </div>
@@ -448,7 +466,6 @@ export default function TeacherDashboard() {
             </form>
           </div>
 
-          {/* Materials Grid */}
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {materials.map(m => (
               <div key={m.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 hover:shadow-lg hover:scale-[1.02] transition-all duration-300">
