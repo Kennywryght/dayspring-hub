@@ -7,7 +7,7 @@ from app.database import supabase
 security = HTTPBearer()
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    # ✅ strip any accidental quotes or whitespace from the token
+    # strip any accidental quotes or whitespace from the token
     token = credentials.credentials.strip().strip('"').strip("'")
 
     try:
@@ -54,8 +54,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                 # Get all class_ids from class_teachers table
                 try:
                     ct_res = supabase.table("class_teachers").select("class_id").eq("teacher_id", user.id).execute()
-                    class_ids = [row["class_id"] for row in ct_res.data] if ct_res.data else []
-                except:
+                    # 🔧 FIX: Convert UUIDs to strings for easy comparison with frontend form data
+                    class_ids = [str(row["class_id"]) for row in ct_res.data] if ct_res.data else []
+                except Exception as e:
+                    print(f"Error fetching class_ids for teacher {user.id}: {e}")
                     class_ids = []
                 return {
                     "user_id": user.id,
