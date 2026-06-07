@@ -147,7 +147,11 @@ export default function TeacherDashboard() {
       showMsg('Material uploaded');
       setMatTitle(''); setMatDesc(''); setMatFile(null); setMatAudio(null); setMatIcon('📚');
       fetchData();
-    } else showMsg('Upload failed', 'error');
+    } 
+    else {
+      const err = await res.json().catch(() => ({}));
+      showMsg(err.detail || 'Upload failed', 'error');
+    }
   };
 
   const deleteMaterial = async (id) => {
@@ -179,7 +183,11 @@ export default function TeacherDashboard() {
       showMsg('Assignment created');
       setAssTitle(''); setAssDesc(''); setAssDeadline(''); setAssFile(null); setAssAudio(null); setAssIcon('📝');
       fetchData();
-    } else showMsg('Creation failed', 'error');
+    }
+    else {
+      const err = await res.json().catch(() => ({}));
+      showMsg(err.detail || 'Creation failed', 'error');
+    }
   };
 
   const deleteAssignment = async (id) => {

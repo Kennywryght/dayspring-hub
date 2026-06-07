@@ -6,7 +6,21 @@ import uuid
 
 router = APIRouter(prefix="/materials", tags=["Materials"])
 
-ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "gif", "webp"}
+# ✅ Expanded allowed file types (covers most school documents, images, videos, audio)
+ALLOWED_EXTENSIONS = {
+    # Documents
+    "pdf", "doc", "docx", "txt", "rtf", "odt",
+    # Images
+    "png", "jpg", "jpeg", "gif", "webp", "bmp",
+    # Presentations
+    "ppt", "pptx",
+    # Spreadsheets
+    "xls", "xlsx", "csv",
+    # Video
+    "mp4", "mov", "avi", "mkv", "webm", "flv",
+    # Audio
+    "mp3", "wav", "ogg", "wma", "aac",
+}
 
 def get_file_extension(filename: str):
     return filename.lower().split(".")[-1] if "." in filename else ""
@@ -22,11 +36,6 @@ async def upload_material(
     class_id: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
-
-    print("=== POST /materials ===")
-    print("User role:", current_user.get("role"))
-    print("Class ID:", class_id)
-
     # ROLE CHECK
     if current_user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can upload materials")
@@ -45,7 +54,7 @@ async def upload_material(
     material_type = "link"
 
     # =========================
-    # FILE UPLOAD (FIXED)
+    # FILE UPLOAD
     # =========================
     if file:
         filename = file.filename or ""
@@ -54,13 +63,30 @@ async def upload_material(
         if ext not in ALLOWED_EXTENSIONS:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported file type '.{ext}'. Allowed: {list(ALLOWED_EXTENSIONS)}"
+                detail=f"Unsupported file type '.{ext}'. Allowed: {sorted(ALLOWED_EXTENSIONS)}"
             )
 
-        material_type = "pdf" if ext == "pdf" else "image"
+        # Determine material type based on extension
+        if ext in ("pdf", "doc", "docx", "txt", "rtf", "odt"):
+            material_type = "pdf"
+        elif ext in ("png", "jpg", "jpeg", "gif", "webp", "bmp"):
+            material_type = "image"
+        elif ext in ("mp4", "mov", "avi", "mkv", "webm", "flv"):
+            material_type = "video"
+        elif ext in ("mp3", "wav", "ogg", "wma", "aac"):
+            material_type = "audio"
+        elif ext in ("ppt", "pptx", "xls", "xlsx", "csv"):
+            material_type = "pdf"   # treat as document
+        else:
+            material_type = "link"
 
         storage_path = f"materials/{class_id}/{uuid.uuid4()}-{filename}"
         contents = await file.read()
+
+        # ✅ Validate file size (max 50 MB)
+        max_size = 50 * 1024 * 1024  # 50 MB
+        if len(contents) > max_size:
+            raise HTTPException(status_code=400, detail="File too large (max 50 MB)")
 
         try:
             supabase.storage.from_("learning-materials").upload(
@@ -70,15 +96,14 @@ async def upload_material(
                     "content-type": file.content_type or "application/octet-stream"
                 }
             )
-
             file_url = supabase.storage.from_("learning-materials").get_public_url(storage_path)
 
         except Exception as e:
             print("FILE UPLOAD ERROR:", e)
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
 
     # =========================
-    # AUDIO UPLOAD (FIXED)
+    # AUDIO UPLOAD
     # =========================
     if audio:
         audio_filename = f"audio/{uuid.uuid4()}.webm"
@@ -90,12 +115,11 @@ async def upload_material(
                 file=audio_contents,
                 file_options={"content-type": "audio/webm"}
             )
-
             audio_url = supabase.storage.from_("learning-materials").get_public_url(audio_filename)
 
         except Exception as e:
             print("AUDIO UPLOAD ERROR:", e)
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=f"Audio upload failed: {str(e)}")
 
     # =========================
     # DATABASE INSERT
@@ -133,7 +157,6 @@ async def list_materials(
     student_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
-
     if current_user["role"] == "teacher":
         if not class_id:
             raise HTTPException(status_code=400, detail="class_id required")
@@ -179,7 +202,6 @@ async def list_materials(
 # =========================
 @router.delete("/{material_id}/")
 async def delete_material(material_id: str, current_user: dict = Depends(get_current_user)):
-
     if current_user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can delete")
 
