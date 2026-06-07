@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from app.database import supabase
@@ -9,16 +9,21 @@ router = APIRouter(prefix="/announcements", tags=["Announcements"])
 class AnnouncementCreate(BaseModel):
     title: str
     content: str
-    class_id: Optional[str] = None  # teachers must pass this
+    class_id: Optional[str] = None
 
 @router.post("/")
 async def create_announcement(data: AnnouncementCreate, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can post")
 
+    # Accept the class_id from the request body
     class_id = data.class_id
+
+    # If class_id is empty or missing, reject
     if not class_id:
-        raise HTTPException(status_code=400, detail="class_id is required")
+        raise HTTPException(status_code=400, detail="class_id is required (send it in the request body)")
+
+    # Verify the teacher is assigned to this class
     if class_id not in current_user.get("class_ids", []):
         raise HTTPException(status_code=403, detail="You are not assigned to this class")
 
@@ -28,9 +33,11 @@ async def create_announcement(data: AnnouncementCreate, current_user: dict = Dep
         "class_id": class_id,
         "teacher_id": current_user["user_id"]
     }).execute()
+
     if result.data:
         return result.data[0]
-    raise HTTPException(status_code=500, detail="Failed to post")
+    raise HTTPException(status_code=500, detail="Failed to post announcement")
+
 
 @router.get("/")
 async def list_announcements(
@@ -66,5 +73,11 @@ async def list_announcements(
     if not effective_class_id:
         raise HTTPException(status_code=400, detail="No class associated")
 
-    result = supabase.table("announcements").select("*").eq("class_id", effective_class_id).order("created_at", desc=True).execute()
+    result = (
+        supabase.table("announcements")
+        .select("*")
+        .eq("class_id", effective_class_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
     return result.data

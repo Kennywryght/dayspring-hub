@@ -234,7 +234,7 @@ export default function TeacherDashboard() {
     const res = await fetch(`${API_URL}announcements/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.access_token}` },
-      body: JSON.stringify({ title: annTitle, content: annContent }),
+      body: JSON.stringify({ title: annTitle, content: annContent, class_id: selectedClassId }),
     });
     if (res.ok) { showMsg('Announcement posted'); setAnnTitle(''); setAnnContent(''); fetchData(); }
     else showMsg('Failed', 'error');
