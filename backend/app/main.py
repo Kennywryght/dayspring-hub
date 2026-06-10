@@ -7,7 +7,7 @@ from app.routers import (
     auth_teacher, auth_student, auth_parent,
     materials, assignments, submissions,
     announcements, students_crud, parent,
-    admin, teacher, auth_admin
+    admin, teacher, auth_admin, quiz
 )
 
 # ------------------------------------------------------------------
@@ -46,7 +46,7 @@ routers = [
     auth_teacher, auth_student, auth_parent,
     materials, assignments, submissions,
     announcements, students_crud, parent,
-    admin, teacher, auth_admin
+    admin, teacher, auth_admin, quiz
 ]
 
 for r in routers:

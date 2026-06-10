@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
-import { useNotifications } from '../context/NotificationContext';   // new
+import { useNotifications } from '../context/NotificationContext';
 import { useNavigate } from 'react-router-dom';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://dayspring-hub.onrender.com/api/v1/';
@@ -9,9 +9,10 @@ const API_URL = import.meta.env.VITE_API_URL || 'https://dayspring-hub.onrender.
 export default function StudentDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { updateNotifications } = useNotifications();   // new
+  const { updateNotifications } = useNotifications();
   const [tab, setTab] = useState('home');
 
+  // Original states
   const [materials, setMaterials] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
@@ -20,12 +21,23 @@ export default function StudentDashboard() {
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('success');
 
+  // Quiz feature states
+  const [availableQuizzes, setAvailableQuizzes] = useState([]);
+  const [activeQuiz, setActiveQuiz] = useState(null);
+  const [quizQuestions, setQuizQuestions] = useState([]);
+  const [responses, setResponses] = useState({});
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
+
   useEffect(() => {
     if (!user || user.role !== 'student') {
       navigate('/login');
       return;
     }
-    fetchData();
+    if (tab === 'quizzes') {
+      fetchAvailableQuizzes();
+    } else {
+      fetchData();
+    }
   }, [tab, user]);
 
   const fetchData = async () => {
@@ -39,7 +51,6 @@ export default function StudentDashboard() {
     if (assRes.ok) {
       const assData = await assRes.json();
       setAssignments(assData);
-      // Update notification badge for new assignments
       updateNotifications('student', assData, 'assignments');
 
       assData.forEach(async (ass) => {
@@ -53,8 +64,79 @@ export default function StudentDashboard() {
     if (annRes.ok) {
       const annData = await annRes.json();
       setAnnouncements(annData);
-      // Update notification badge for new announcements
       updateNotifications('student', annData, 'announcements');
+    }
+  };
+
+  const fetchAvailableQuizzes = async () => {
+    try {
+      const res = await fetch(`${API_URL}quizzes/available`, {
+        headers: { Authorization: `Bearer ${user.access_token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableQuizzes(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch quizzes', err);
+    }
+  };
+
+  const startQuiz = async (quizId) => {
+    try {
+      const res = await fetch(`${API_URL}quizzes/${quizId}/take`, {
+        headers: { Authorization: `Bearer ${user.access_token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActiveQuiz(data.quiz);
+        setQuizQuestions(data.questions);
+        setResponses({});
+        setQuizSubmitted(false);
+      } else {
+        showMsg('Failed to load quiz', 'error');
+      }
+    } catch (err) {
+      showMsg('Failed to load quiz', 'error');
+    }
+  };
+
+  const handleAnswerChange = (questionId, value, type) => {
+    setResponses(prev => ({
+      ...prev,
+      [questionId]: type === 'option' ? { selected_option_id: value } : { text_answer: value },
+    }));
+  };
+
+  const submitQuiz = async () => {
+    const answers = quizQuestions.map(q => ({
+      question_id: q.id,
+      selected_option_id: responses[q.id]?.selected_option_id || null,
+      text_answer: responses[q.id]?.text_answer || null,
+    }));
+
+    try {
+      const res = await fetch(`${API_URL}quizzes/${activeQuiz.id}/submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.access_token}`,
+        },
+        body: JSON.stringify({ answers }),
+      });
+
+      if (res.ok) {
+        showMsg('Quiz submitted successfully!');
+        setQuizSubmitted(true);
+        setActiveQuiz(null);
+        // Refresh available quizzes to remove completed? (optional)
+        fetchAvailableQuizzes();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showMsg(err.detail || 'Submission failed', 'error');
+      }
+    } catch (err) {
+      showMsg('Submission failed', 'error');
     }
   };
 
@@ -98,6 +180,7 @@ export default function StudentDashboard() {
     { label: 'Materials', onClick: () => setTab('materials') },
     { label: 'Assignments', onClick: () => setTab('assignments') },
     { label: 'Announcements', onClick: () => setTab('announcements') },
+    { label: 'Quizzes', onClick: () => setTab('quizzes') },
   ];
 
   return (
@@ -320,6 +403,122 @@ export default function StudentDashboard() {
                   <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">{new Date(a.created_at).toLocaleString()}</p>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===== QUIZZES TAB (NEW) ===== */}
+      {tab === 'quizzes' && (
+        <div className="space-y-8 animate-fade-in-up">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-2xl shadow-lg">🧠</div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Quizzes</h2>
+          </div>
+
+          {!activeQuiz ? (
+            <>
+              {availableQuizzes.length === 0 ? (
+                <div className="text-center py-20 bg-white dark:bg-gray-800 rounded-3xl border border-dashed border-gray-300 dark:border-gray-600">
+                  <span className="text-6xl">📭</span>
+                  <p className="text-gray-400 dark:text-gray-500 mt-4 text-lg font-medium">
+                    No quizzes available yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                  {availableQuizzes.map(quiz => (
+                    <div
+                      key={quiz.id}
+                      className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 hover:shadow-lg transition-all duration-300"
+                    >
+                      <h3 className="font-bold text-xl text-gray-900 dark:text-white mb-2">
+                        {quiz.title}
+                      </h3>
+                      {quiz.description && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                          {quiz.description}
+                        </p>
+                      )}
+                      <button
+                        onClick={() => startQuiz(quiz.id)}
+                        className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all duration-200"
+                      >
+                        Start Quiz
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {activeQuiz.title}
+                </h2>
+                <button
+                  onClick={() => setActiveQuiz(null)}
+                  className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-sm font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
+              {activeQuiz.description && (
+                <p className="text-gray-600 dark:text-gray-300 mb-8">
+                  {activeQuiz.description}
+                </p>
+              )}
+
+              <div className="space-y-8">
+                {quizQuestions.map((q, idx) => (
+                  <div
+                    key={q.id}
+                    className="border border-gray-200 dark:border-gray-700 rounded-2xl p-5"
+                  >
+                    <p className="font-semibold text-lg text-gray-800 dark:text-gray-200 mb-3">
+                      {idx + 1}. {q.question_text}
+                    </p>
+                    {q.question_type === 'multiple_choice' ? (
+                      <div className="space-y-2">
+                        {q.options.map(opt => (
+                          <label
+                            key={opt.id}
+                            className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
+                          >
+                            <input
+                              type="radio"
+                              name={`question-${q.id}`}
+                              value={opt.id}
+                              checked={responses[q.id]?.selected_option_id === opt.id}
+                              onChange={() => handleAnswerChange(q.id, opt.id, 'option')}
+                              className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                            />
+                            <span className="text-gray-700 dark:text-gray-200 text-sm">
+                              {opt.option_text}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <textarea
+                        value={responses[q.id]?.text_answer || ''}
+                        onChange={(e) => handleAnswerChange(q.id, e.target.value, 'text')}
+                        placeholder="Type your answer..."
+                        rows={3}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
+                      />
+                    )}
+                  </div>
+                ))}
+
+                <button
+                  onClick={submitQuiz}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold px-8 py-3.5 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] active:scale-95"
+                >
+                  Submit Answers
+                </button>
+              </div>
             </div>
           )}
         </div>

@@ -1,13 +1,13 @@
 {
   "rewrites": [
     {
-      "source": "/((?!assets/|sw\\.js|manifest\\.json|favicon\\.ico).*)",
+      "source": "/((?!.*\\.(js|css|png|jpg|jpeg|gif|svg|ico|json|webp|woff|woff2|ttf|eot|txt|webmanifest)).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
     {
-      "source": "/(assets/.*)",
+      "source": "/assets/(.*)",
       "headers": [
         {
           "key": "Cache-Control",
@@ -21,10 +21,6 @@
         {
           "key": "Cache-Control",
           "value": "no-cache"
-        },
-        {
-          "key": "Content-Type",
-          "value": "application/javascript; charset=utf-8"
         }
       ]
     }

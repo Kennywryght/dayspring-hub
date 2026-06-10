@@ -24,7 +24,7 @@ export default function TeacherDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { updateNotifications } = useNotifications();
-  const playClick = useClickSound();                    // <-- added click sound
+  const playClick = useClickSound();
 
   const [tab, setTab] = useState('home');
 
@@ -63,6 +63,15 @@ export default function TeacherDashboard() {
   const [newStudentNumber, setNewStudentNumber] = useState('');
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentPass, setNewStudentPass] = useState('');
+
+  // ----- NEW: Quiz feature state -----
+  const [quizTitle, setQuizTitle] = useState('');
+  const [quizDesc, setQuizDesc] = useState('');
+  const [questions, setQuestions] = useState([
+    { text: '', type: 'multiple_choice', options: ['', '', '', ''], correctIndex: 0 }
+  ]);
+  const [quizzes, setQuizzes] = useState([]);
+  // -----------------------------------
 
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('success');
@@ -115,7 +124,13 @@ export default function TeacherDashboard() {
   }, [user]);
 
   useEffect(() => {
-    if (selectedClassId) fetchData();
+    if (selectedClassId) {
+      if (tab === 'quizzes') {
+        fetchQuizzes();
+      } else {
+        fetchData();
+      }
+    }
   }, [tab, selectedClassId]);
 
   const fetchData = async () => {
@@ -135,13 +150,150 @@ export default function TeacherDashboard() {
     if (studRes.ok) setStudents(await studRes.json());
   };
 
+  // ----- NEW: Quiz API functions -----
+  const fetchQuizzes = async () => {
+    try {
+      const res = await fetch(`${API_URL}quizzes/`, {
+        headers: { Authorization: `Bearer ${user.access_token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setQuizzes(data);
+      } else {
+        setQuizzes([]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch quizzes', err);
+      setQuizzes([]);
+    }
+  };
+
+  const addQuestion = () => {
+    setQuestions([
+      ...questions,
+      { text: '', type: 'multiple_choice', options: ['', '', '', ''], correctIndex: 0 }
+    ]);
+  };
+
+  const removeQuestion = (index) => {
+    if (questions.length <= 1) return;
+    const newQ = questions.filter((_, i) => i !== index);
+    setQuestions(newQ);
+  };
+
+  const updateQuestion = (index, field, value) => {
+    const newQ = [...questions];
+    newQ[index][field] = value;
+    setQuestions(newQ);
+  };
+
+  const updateOption = (qIndex, oIndex, value) => {
+    const newQ = [...questions];
+    newQ[qIndex].options[oIndex] = value;
+    setQuestions(newQ);
+  };
+
+  const setCorrectOption = (qIndex, oIndex) => {
+    const newQ = [...questions];
+    newQ[qIndex].correctIndex = oIndex;
+    setQuestions(newQ);
+  };
+
+  const handleCreateQuiz = async (e) => {
+    e.preventDefault();
+    if (!quizTitle || questions.length === 0) {
+      showMsg('Please enter a title and at least one question', 'error');
+      return;
+    }
+
+    const payload = {
+      title: quizTitle,
+      description: quizDesc,
+      class_id: selectedClassId,
+      questions: questions.map((q, idx) => ({
+        question_text: q.text,
+        question_type: q.type,
+        order: idx,
+        options:
+          q.type === 'multiple_choice'
+            ? q.options.map((opt, oi) => ({
+                option_text: opt,
+                is_correct: oi === q.correctIndex,
+              }))
+            : null,
+      })),
+    };
+
+    try {
+      const res = await fetch(`${API_URL}quizzes/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.access_token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        showMsg('Quiz created successfully!');
+        setQuizTitle('');
+        setQuizDesc('');
+        setQuestions([
+          { text: '', type: 'multiple_choice', options: ['', '', '', ''], correctIndex: 0 }
+        ]);
+        fetchQuizzes();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showMsg(err.detail || 'Creation failed', 'error');
+      }
+    } catch (err) {
+      showMsg('Creation failed', 'error');
+    }
+  };
+
+  const publishQuiz = async (quizId) => {
+    try {
+      const res = await fetch(`${API_URL}quizzes/${quizId}/publish`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${user.access_token}` },
+      });
+      if (res.ok) {
+        showMsg('Quiz published');
+        fetchQuizzes();
+      } else {
+        showMsg('Publish failed', 'error');
+      }
+    } catch (err) {
+      showMsg('Publish failed', 'error');
+    }
+  };
+
+  const deleteQuiz = async (quizId) => {
+    if (!confirm('Delete this quiz?')) return;
+    try {
+      const res = await fetch(`${API_URL}quizzes/${quizId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${user.access_token}` },
+      });
+      if (res.ok) {
+        showMsg('Quiz deleted');
+        fetchQuizzes();
+      } else {
+        showMsg('Delete failed', 'error');
+      }
+    } catch (err) {
+      showMsg('Delete failed', 'error');
+    }
+  };
+  // ----------------------------------
+
   const showMsg = (text, type = 'success') => {
     setMsg(text);
     setMsgType(type);
     setTimeout(() => setMsg(''), 3000);
   };
 
-  // ✅ Upload material – now shows server error details
+  // ✅ Upload material
   const handleUploadMaterial = async (e) => {
     e.preventDefault();
     const formData = new FormData();
@@ -177,7 +329,7 @@ export default function TeacherDashboard() {
     fetchData();
   };
 
-  // ✅ Create assignment – now shows server error details
+  // ✅ Create assignment
   const handleCreateAssignment = async (e) => {
     e.preventDefault();
     const formData = new FormData();
@@ -245,7 +397,7 @@ export default function TeacherDashboard() {
     else showMsg('Failed to save grade', 'error');
   };
 
-  // ✅ Post announcement – now sends class_id
+  // ✅ Post announcement
   const handlePostAnnouncement = async (e) => {
     e.preventDefault();
     const res = await fetch(`${API_URL}announcements/`, {
@@ -300,6 +452,7 @@ export default function TeacherDashboard() {
     { label: 'Assignments', onClick: () => setTab('assignments') },
     { label: 'Announcements', onClick: () => setTab('announcements') },
     { label: 'Students', onClick: () => setTab('students') },
+    { label: 'Quizzes', onClick: () => setTab('quizzes') },   // new
   ];
 
   return (
@@ -776,6 +929,137 @@ export default function TeacherDashboard() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== NEW: QUIZZES TAB ===== */}
+      {tab === 'quizzes' && (
+        <div className="space-y-8 animate-fade-in-up">
+          {/* Create Quiz Form */}
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white text-2xl shadow-lg">🧠</div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Create a New Quiz</h2>
+            </div>
+
+            <form onSubmit={handleCreateQuiz} className="space-y-5 max-w-3xl">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Quiz Title *</label>
+                  <input type="text" placeholder="e.g. Science Revision" value={quizTitle}
+                    onChange={(e) => setQuizTitle(e.target.value)}
+                    className="w-full px-4 py-3.5 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Description</label>
+                  <input type="text" placeholder="Optional description" value={quizDesc}
+                    onChange={(e) => setQuizDesc(e.target.value)}
+                    className="w-full px-4 py-3.5 rounded-2xl border border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400" />
+                </div>
+              </div>
+
+              {/* Dynamic Questions */}
+              {questions.map((q, qIdx) => (
+                <div key={qIdx} className="border border-gray-200 dark:border-gray-700 rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-800 dark:text-gray-200">Question {qIdx + 1}</h3>
+                    {questions.length > 1 && (
+                      <button type="button" onClick={() => removeQuestion(qIdx)}
+                        className="text-red-500 text-sm font-medium hover:underline">Remove</button>
+                    )}
+                  </div>
+
+                  <input type="text" placeholder="Enter question text" value={q.text}
+                    onChange={(e) => updateQuestion(qIdx, 'text', e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400" required />
+
+                  <div className="flex items-center gap-4">
+                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Type:</label>
+                    <select value={q.type}
+                      onChange={(e) => updateQuestion(qIdx, 'type', e.target.value)}
+                      className="px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                      <option value="multiple_choice">Multiple Choice</option>
+                      <option value="text">Text Answer</option>
+                    </select>
+                  </div>
+
+                  {q.type === 'multiple_choice' && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Options (mark the correct one)</p>
+                      {q.options.map((opt, oIdx) => (
+                        <div key={oIdx} className="flex items-center gap-3">
+                          <input type="radio" name={`correct-${qIdx}`}
+                            checked={q.correctIndex === oIdx}
+                            onChange={() => setCorrectOption(qIdx, oIdx)}
+                            className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500" />
+                          <input type="text" value={opt}
+                            onChange={(e) => updateOption(qIdx, oIdx, e.target.value)}
+                            placeholder={`Option ${oIdx + 1}`}
+                            className="flex-1 px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400" required />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {q.type === 'text' && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 italic">Student will type their answer.</p>
+                  )}
+                </div>
+              ))}
+
+              <button type="button" onClick={addQuestion}
+                className="text-indigo-600 dark:text-indigo-400 font-semibold text-sm hover:underline">
+                + Add Another Question
+              </button>
+
+              <div>
+                <button type="submit"
+                  className="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold px-8 py-3.5 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] active:scale-95">
+                  Create Quiz
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Existing Quizzes List */}
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">My Quizzes</h2>
+            {quizzes.length === 0 ? (
+              <div className="text-center py-10">
+                <span className="text-4xl">📭</span>
+                <p className="text-gray-400 dark:text-gray-500 mt-2 text-sm">No quizzes created yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {quizzes.map(quiz => (
+                  <div key={quiz.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                    <div className="mb-2 sm:mb-0">
+                      <p className="font-semibold text-gray-800 dark:text-gray-200">{quiz.title}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {quiz.is_published ? (
+                          <span className="text-green-600 dark:text-green-400 flex items-center gap-1">✅ Published</span>
+                        ) : (
+                          <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">❌ Draft</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {!quiz.is_published && (
+                        <button onClick={() => publishQuiz(quiz.id)}
+                          className="text-green-600 dark:text-green-400 text-sm font-semibold hover:underline">
+                          Publish
+                        </button>
+                      )}
+                      <button onClick={() => deleteQuiz(quiz.id)}
+                        className="text-red-500 text-sm font-semibold hover:underline">
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
