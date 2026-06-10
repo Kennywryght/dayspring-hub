@@ -2,8 +2,8 @@ import { useState, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
-const API_URL =
-  import.meta.env.VITE_API_URL || 'https://dayspring-hub.onrender.com/api/v1/';
+const rawBase = import.meta.env.VITE_API_URL || 'https://dayspring-hub.onrender.com/api/v1/';
+const API_URL = rawBase.endsWith('/') ? rawBase : rawBase + '/';
 
 // Optional click sound
 const useClickSound = () => {
