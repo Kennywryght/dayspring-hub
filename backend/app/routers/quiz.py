@@ -8,7 +8,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/quizzes", tags=["Quizzes"])
+router = APIRouter(prefix="/quizzes", tags=["Quizzes"])
 
 # ---------- Pydantic Schemas ----------
 class OptionCreate(BaseModel):
