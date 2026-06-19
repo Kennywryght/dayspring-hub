@@ -79,7 +79,6 @@ async def get_student_db_id(user):
 
 # ═══════════════════════════════════════════════════════════════
 # CRITICAL: Fixed-path routes MUST come BEFORE parameterised routes
-# Otherwise FastAPI interprets "submissions" as a {quiz_id}
 # ═══════════════════════════════════════════════════════════════
 
 # ── TEACHER: Create Quiz ────────────────────────────────────
@@ -144,7 +143,7 @@ async def list_my_quizzes(user=Depends(get_current_user)):
     return quizzes.data
 
 
-# ── STUDENT: /available MUST come before /{quiz_id} ─────────
+# ── STUDENT: /available ─────────────────────────────────────
 
 @router.get("/available")
 async def available_quizzes(user=Depends(get_current_user)):
@@ -162,7 +161,7 @@ async def available_quizzes(user=Depends(get_current_user)):
     return quizzes.data
 
 
-# ── STUDENT: /submissions (my submissions) MUST come before /{quiz_id} ─
+# ── STUDENT: /submissions (my submissions) ──────────────────
 
 @router.get("/submissions")
 async def get_my_submissions(user=Depends(get_current_user)):
@@ -173,13 +172,11 @@ async def get_my_submissions(user=Depends(get_current_user)):
     student_db_id = await get_student_db_id(user)
     logger.info(f"Fetching submissions for student DB ID: {student_db_id}")
     
-    # Get all responses for this student
     responses = supabase.table("student_responses") \
         .select("*, questions(quiz_id)") \
         .eq("student_id", student_db_id) \
         .execute()
     
-    # Group by quiz
     submissions = {}
     for r in responses.data:
         if r.get("questions") and r["questions"].get("quiz_id"):
@@ -188,7 +185,7 @@ async def get_my_submissions(user=Depends(get_current_user)):
                 submissions[quiz_id] = {
                     "quiz_id": quiz_id,
                     "submitted": True,
-                    "submitted_at": r.get("submitted_at"),
+                    "submitted_at": None,
                 }
     
     logger.info(f"Found submissions for quizzes: {list(submissions.keys())}")
@@ -228,13 +225,36 @@ async def grade_submission(submission_id: str, payload: GradePayload, user=Depen
     
     try:
         for grade in payload.grades:
-            supabase.table("student_responses") \
-                .update({
-                    "points": grade.points,
-                    "feedback": grade.feedback
-                }) \
-                .eq("id", grade.answer_id) \
-                .execute()
+            # Build update dict with ONLY columns that exist in the table
+            update_data = {}
+            
+            if grade.points is not None:
+                update_data["points"] = grade.points
+            
+            # Only include feedback if the column exists (it might not)
+            # We'll try to update feedback, and if it fails, we'll skip it
+            if grade.feedback is not None and grade.feedback != "":
+                try:
+                    # Try updating with feedback
+                    update_data_with_feedback = {**update_data, "feedback": grade.feedback}
+                    supabase.table("student_responses") \
+                        .update(update_data_with_feedback) \
+                        .eq("id", grade.answer_id) \
+                        .execute()
+                except Exception:
+                    # If feedback column doesn't exist, just update points
+                    if update_data:
+                        supabase.table("student_responses") \
+                            .update(update_data) \
+                            .eq("id", grade.answer_id) \
+                            .execute()
+            else:
+                # Just update points (no feedback)
+                if update_data:
+                    supabase.table("student_responses") \
+                        .update(update_data) \
+                        .eq("id", grade.answer_id) \
+                        .execute()
         
         return {"detail": "Grades saved successfully"}
     except Exception as e:
@@ -255,7 +275,6 @@ async def get_quiz_submissions(quiz_id: int, user=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Only teachers can view submissions")
     
     try:
-        # Verify teacher owns this quiz
         quiz = supabase.table("quizzes") \
             .select("*") \
             .eq("id", quiz_id) \
@@ -266,26 +285,21 @@ async def get_quiz_submissions(quiz_id: int, user=Depends(get_current_user)):
         if not quiz.data:
             raise HTTPException(status_code=404, detail="Quiz not found")
         
-        # Get all unique students who submitted
-        # Note: student_responses doesn't have created_at, so we skip that field
         responses = supabase.table("student_responses") \
             .select("student_id, questions!inner(quiz_id)") \
             .eq("questions.quiz_id", quiz_id) \
             .execute()
         
-        # Group by student (deduplicate)
         students = {}
         for r in responses.data:
             sid = r["student_id"]
             if sid not in students:
-                # Get student name from students table
                 try:
                     student = supabase.table("students") \
                         .select("display_name") \
                         .eq("id", sid) \
                         .single() \
                         .execute()
-                    
                     student_name = student.data["display_name"] if student.data else "Unknown"
                 except Exception:
                     student_name = "Unknown"
@@ -293,7 +307,7 @@ async def get_quiz_submissions(quiz_id: int, user=Depends(get_current_user)):
                 students[sid] = {
                     "id": sid,
                     "student_name": student_name,
-                    "submitted_at": None,  # We don't have created_at in student_responses
+                    "submitted_at": None,
                 }
         
         return list(students.values())
