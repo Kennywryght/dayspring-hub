@@ -1,5 +1,6 @@
 # app/routers/quiz.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from app.database import supabase
 from app.utils.auth import get_current_user
 from typing import Optional, List
@@ -204,35 +205,57 @@ async def take_quiz(quiz_id: int, user=Depends(get_current_user)):
 
 @router.post("/{quiz_id}/submit")
 async def submit_quiz(quiz_id: int, payload: SubmissionPayload, user=Depends(get_current_user)):
-    if user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Only students can submit quizzes")
+    try:
+        logger.info(f"Quiz submission attempt - User: {user.get('user_id')}, Quiz: {quiz_id}")
+        
+        if user["role"] != "student":
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Only students can submit quizzes"}
+            )
 
-    if not payload.answers:
-        raise HTTPException(status_code=400, detail="No answers provided")
+        if not payload.answers:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "No answers provided"}
+            )
 
-    # Duplicate submission check: look at all question IDs in this quiz
-    # rather than just the first answer, to avoid edge-case bypasses
-    question_ids = [a.question_id for a in payload.answers]
-    existing = supabase.table("student_responses") \
-        .select("id") \
-        .in_("question_id", question_ids) \
-        .eq("student_id", user["user_id"]) \
-        .limit(1) \
-        .execute()
+        # Duplicate submission check: look at all question IDs in this quiz
+        # rather than just the first answer, to avoid edge-case bypasses
+        question_ids = [a.question_id for a in payload.answers]
+        existing = supabase.table("student_responses") \
+            .select("id") \
+            .in_("question_id", question_ids) \
+            .eq("student_id", user["user_id"]) \
+            .limit(1) \
+            .execute()
 
-    if existing.data:
-        raise HTTPException(status_code=400, detail="You have already submitted this quiz")
+        if existing.data:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "You have already submitted this quiz"}
+            )
 
-    for ans in payload.answers:
-        response = {
-            "question_id": ans.question_id,
-            "student_id": user["user_id"],
-            "selected_option_id": ans.selected_option_id,
-            "text_answer": ans.text_answer,
-        }
-        supabase.table("student_responses").insert(response).execute()
+        for ans in payload.answers:
+            response = {
+                "question_id": ans.question_id,
+                "student_id": user["user_id"],
+                "selected_option_id": ans.selected_option_id,
+                "text_answer": ans.text_answer,
+            }
+            supabase.table("student_responses").insert(response).execute()
 
-    return {"detail": "Answers submitted successfully"}
+        logger.info(f"Quiz {quiz_id} submitted successfully by user {user.get('user_id')}")
+        return JSONResponse(
+            content={"detail": "Answers submitted successfully"}
+        )
+    
+    except Exception as e:
+        logger.error(f"Error in submit_quiz: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Internal server error: {str(e)}"}
+        )
 
 
 @router.put("/{quiz_id}/publish")

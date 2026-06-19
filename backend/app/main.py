@@ -1,7 +1,8 @@
 import os
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.routers import (
     auth_teacher, auth_student, auth_parent,
@@ -31,13 +32,37 @@ cors_origins = os.getenv(
 
 allow_origins = [origin.strip() for origin in cors_origins if origin.strip()]
 
+# If no origins are configured, allow all (fallback for development)
+if not allow_origins:
+    allow_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+
+# ------------------------------------------------------------------
+# Middleware to log requests and ensure CORS headers on errors
+# ------------------------------------------------------------------
+@app.middleware("http")
+async def add_cors_header(request: Request, call_next):
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        logger.error(f"Unhandled error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+            headers={
+                "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+                "Access-Control-Allow-Credentials": "true",
+            }
+        )
 
 # ------------------------------------------------------------------
 # Register all routers
@@ -58,6 +83,21 @@ for r in routers:
 @app.get("/")
 def root():
     return {"status": "ok"}
+
+# ------------------------------------------------------------------
+# CORS pre-flight handler (explicit OPTIONS handler)
+# ------------------------------------------------------------------
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str, request: Request):
+    return JSONResponse(
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "true",
+        }
+    )
 
 # ------------------------------------------------------------------
 # Startup event – friendly log
