@@ -83,6 +83,7 @@ export default function TeacherDashboard() {
   // Quiz results state
   const [quizResults, setQuizResults] = useState(null);
   const [resultsView, setResultsView] = useState(null);
+  const [assignmentStats, setAssignmentStats] = useState({});
 
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('success');
@@ -163,10 +164,28 @@ export default function TeacherDashboard() {
       fetch(`${API_URL}students/${classParam}`, { headers }),
     ]);
     if (matRes.ok) setMaterials(await matRes.json());
-    if (assRes.ok) setAssignments(await assRes.json());
+    if (assRes.ok) { const d = await assRes.json(); setAssignments(d); fetchAssignmentStats(d); }
+
     if (annRes.ok) setAnnouncements(await annRes.json());
     if (studRes.ok) setStudents(await studRes.json());
   };
+  
+  const fetchAssignmentStats = async (assignmentsList) => {
+    if (!assignmentsList || assignmentsList.length === 0) return;
+    const headers = { Authorization: `Bearer ${user.access_token}` };
+    const stats = {};
+    for (const ass of assignmentsList) {
+      try {
+         const res = await fetch(`${API_URL}submissions/${ass.id}/`, { headers });
+         if (res.ok) {
+          const subs = await res.json();
+          stats[ass.id] = { submitted: Array.isArray(subs) ? subs.length : 0, graded: Array.isArray(subs) ? subs.filter(s => s.grade).length : 0 };
+          }
+         }
+         catch (_) { stats[ass.id] = { submitted: 0, graded: 0 }; }
+         }
+         setAssignmentStats(stats);
+      };
 
   // Quiz API functions
   const fetchQuizzes = async () => {
@@ -511,7 +530,9 @@ export default function TeacherDashboard() {
       headers: { Authorization: `Bearer ${user.access_token}` },
       body: formData,
     });
-    if (res.ok) showMsg('Grade saved');
+    if (res.ok) {showMsg('Grade saved');
+      viewSubmissions(selectedAss); fetchData(); 
+    }
     else showMsg('Failed to save grade', 'error');
   };
 
@@ -560,11 +581,14 @@ export default function TeacherDashboard() {
   const totalAssignments = assignments.length;
   const publishedQuizzes = quizzes.filter(q => q.is_published).length;
   const draftQuizzes = quizzes.filter(q => !q.is_published).length;
-  const upcomingDeadlines = assignments
-    .filter(a => a.deadline && new Date(a.deadline) > new Date())
-    .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
-    .slice(0, 3);
+  const totalSubmissions = Object.values(assignmentStats).reduce((s, a) => s + (a.submitted || 0), 0);
+  const totalUngraded = Object.values(assignmentStats).reduce((s, a) => s + ((a.submitted || 0) - (a.graded || 0)), 0);
+  const upcomingDeadlines = assignments.filter(a => a.deadline && new Date(a.deadline) > new Date()).sort((a, b) => new Date(a.deadline) - new Date(b.deadline)).slice(0, 3);
   const recentAnnouncements = announcements.slice(0, 2);
+  const pendingTasks = [];
+  if (totalUngraded > 0) pendingTasks.push(`${totalUngraded} submission(s) need grading`);
+  if (draftQuizzes > 0) pendingTasks.push(`${draftQuizzes} quiz(zes) need publishing`);
+
 
   const navLinks = [
     { label: 'Home', onClick: () => setTab('home') },
@@ -804,13 +828,14 @@ export default function TeacherDashboard() {
       {/* ===== HOME TAB ===== */}
       {tab === 'home' && (
         <div className="space-y-8 animate-fade-in-up">
+          {/* Stats Grid */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {[
               { label: 'Students', value: totalStudents, icon: '👩‍🎓', color: 'from-blue-600 to-indigo-600' },
               { label: 'Materials', value: totalMaterials, icon: '📚', color: 'from-emerald-500 to-teal-600' },
               { label: 'Assignments', value: totalAssignments, icon: '📝', color: 'from-purple-600 to-violet-600' },
-              { label: 'Quizzes', value: publishedQuizzes, icon: '🧠', color: 'from-pink-500 to-rose-600' },
-              { label: 'Drafts', value: draftQuizzes, icon: '📋', color: 'from-orange-500 to-amber-600' },
+              { label: 'Submissions', value: totalSubmissions, icon: '📋', color: 'from-pink-500 to-rose-600' },
+              { label: 'To Grade', value: totalUngraded, icon: '✏️', color: totalUngraded > 0 ? 'from-red-500 to-orange-600' : 'from-green-500 to-emerald-600' },
             ].map(({ label, value, icon, color }) => (
               <div key={label} className={`bg-gradient-to-br ${color} rounded-2xl p-5 shadow-xl text-white`}>
                 <div className="flex items-center justify-between mb-3">
@@ -820,6 +845,68 @@ export default function TeacherDashboard() {
                 <p className="text-3xl md:text-4xl font-black">{value}</p>
               </div>
             ))}
+          </div>
+
+          {/* Pending Tasks Alert - NEW */}
+          {pendingTasks.length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 animate-fade-in-up">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">⚠️</span>
+                <div>
+                  <h3 className="font-bold text-amber-800 dark:text-amber-300">Pending Tasks</h3>
+                  <ul className="text-sm text-amber-600 dark:text-amber-400 mt-1 space-y-1">
+                    {pendingTasks.map((task, idx) => (
+                      <li key={idx}>• {task}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Assignment Overview - NEW */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <span>📝</span> Assignment Overview
+            </h3>
+            {assignments.length === 0 ? (
+              <p className="text-gray-400 dark:text-gray-500 text-sm">No assignments created yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {assignments.map(ass => {
+                  const stats = assignmentStats[ass.id] || { submitted: 0, graded: 0 };
+                  const allGraded = stats.submitted > 0 && stats.submitted === stats.graded;
+                  return (
+                    <div key={ass.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{ass.icon || '📝'}</span>
+                        <div>
+                          <p className="font-medium text-gray-800 dark:text-gray-200">{ass.title}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {stats.submitted} submitted | {stats.graded} graded
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {allGraded ? (
+                          <span className="text-green-600 dark:text-green-400 text-xs font-semibold bg-green-100 dark:bg-green-900/30 px-3 py-1 rounded-full">✅ All Graded</span>
+                        ) : stats.submitted > 0 ? (
+                          <span className="text-amber-600 dark:text-amber-400 text-xs font-semibold bg-amber-100 dark:bg-amber-900/30 px-3 py-1 rounded-full">⏳ {stats.submitted - stats.graded} to grade</span>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500 text-xs">No submissions</span>
+                        )}
+                        <button 
+                          onClick={() => setTab('assignments')} 
+                          className="text-indigo-600 dark:text-indigo-400 text-sm font-semibold hover:underline transition"
+                        >
+                          View All
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Quiz Overview Section */}
@@ -1095,83 +1182,92 @@ export default function TeacherDashboard() {
             </form>
           </div>
 
-          {assignments.map(a => (
-            <div key={a.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 hover:shadow-lg transition-all duration-300">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h3 className="font-bold text-xl flex items-center gap-2">
-                    <span className="text-3xl">{a.icon || '📝'}</span> {a.title}
-                  </h3>
-                  {a.description && <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{a.description}</p>}
-                  {a.deadline && (
-                    <p className="text-xs font-semibold text-red-500 mt-2 flex items-center gap-1">
-                      <span>📅</span> Due: {new Date(a.deadline).toLocaleString()}
-                    </p>
-                  )}
+          {assignments.map(a => {
+            const stats = assignmentStats[a.id] || { submitted: 0, graded: 0 };
+            return (
+              <div key={a.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 hover:shadow-lg transition-all duration-300">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h3 className="font-bold text-xl flex items-center gap-2">
+                      <span className="text-3xl">{a.icon || '📝'}</span> {a.title}
+                    </h3>
+                    {a.description && <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">{a.description}</p>}
+                    {a.deadline && (
+                      <p className="text-xs font-semibold text-red-500 mt-2 flex items-center gap-1">
+                        <span>📅</span> Due: {new Date(a.deadline).toLocaleString()}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-4 mt-3">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">📋 {stats.submitted} submitted</span>
+                      <span className={`text-xs font-semibold ${stats.submitted === stats.graded && stats.submitted > 0 ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                        ✏️ {stats.graded} graded
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 ml-4">
+                    <button onClick={() => viewSubmissions(a.id)} className="text-blue-600 dark:text-blue-400 text-sm font-semibold hover:underline">Submissions</button>
+                    <button onClick={() => deleteAssignment(a.id)} className="text-red-500 text-sm font-semibold hover:underline">Delete</button>
+                  </div>
                 </div>
-                <div className="flex gap-2 ml-4">
-                  <button onClick={() => viewSubmissions(a.id)} className="text-blue-600 dark:text-blue-400 text-sm font-semibold hover:underline">Submissions</button>
-                  <button onClick={() => deleteAssignment(a.id)} className="text-red-500 text-sm font-semibold hover:underline">Delete</button>
-                </div>
-              </div>
-              {a.audio_url && (
-                <div className="mt-4">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">🎤 Voice instruction</p>
-                  <audio controls src={a.audio_url} className="w-full rounded-lg" />
-                </div>
-              )}
-              {a.file_url && (
-                <a href={a.file_url} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 text-sm font-semibold hover:underline mt-3 inline-block">
-                  📎 Download Assignment File
-                </a>
-              )}
-              {selectedAss === a.id && (
-                <div className="mt-5 border-t border-gray-200 dark:border-gray-700 pt-4">
-                  <h4 className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-3">Submissions</h4>
-                  {submissions.length === 0 ? (
-                    <p className="text-sm text-gray-400 dark:text-gray-500">No submissions yet.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {submissions.map(s => (
-                        <div key={s.id} className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-gray-800 dark:text-gray-200">{s.students?.display_name || 'Student'}</span>
-                              {s.file_url && (
-                                <a href={s.file_url} target="_blank" rel="noreferrer" className="text-blue-500 text-sm underline">View File</a>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <input
-                                type="text"
-                                placeholder="Grade"
-                                value={grades[s.id]?.grade || ''}
-                                onChange={(e) => setGrades(prev => ({ ...prev, [s.id]: { ...prev[s.id], grade: e.target.value } }))}
-                                className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                              />
-                              <input
-                                type="text"
-                                placeholder="Feedback"
-                                value={grades[s.id]?.feedback || ''}
-                                onChange={(e) => setGrades(prev => ({ ...prev, [s.id]: { ...prev[s.id], feedback: e.target.value } }))}
-                                className="flex-1 min-w-[120px] px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                              />
-                              <button
-                                onClick={() => handleGrade(s.id)}
-                                className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition"
-                              >
-                                Save
-                              </button>
+                {a.audio_url && (
+                  <div className="mt-4">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">🎤 Voice instruction</p>
+                    <audio controls src={a.audio_url} className="w-full rounded-lg" />
+                  </div>
+                )}
+                {a.file_url && (
+                  <a href={a.file_url} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 text-sm font-semibold hover:underline mt-3 inline-block">
+                    📎 Download Assignment File
+                  </a>
+                )}
+                {selectedAss === a.id && (
+                  <div className="mt-5 border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <h4 className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-3">Submissions</h4>
+                    {submissions.length === 0 ? (
+                      <p className="text-sm text-gray-400 dark:text-gray-500">No submissions yet.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {submissions.map(s => (
+                          <div key={s.id} className={`bg-gray-50 dark:bg-gray-700 rounded-xl p-4 ${s.grade ? 'border-l-4 border-green-500' : 'border-l-4 border-amber-500'}`}>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-gray-800 dark:text-gray-200">{s.students?.display_name || 'Student'}</span>
+                                {s.file_url && (
+                                  <a href={s.file_url} target="_blank" rel="noreferrer" className="text-blue-500 text-sm underline">View File</a>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <input
+                                  type="text"
+                                  placeholder="Grade"
+                                  value={grades[s.id]?.grade || ''}
+                                  onChange={(e) => setGrades(prev => ({ ...prev, [s.id]: { ...prev[s.id], grade: e.target.value } }))}
+                                  className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                />
+                                <input
+                                  type="text"
+                                  placeholder="Feedback"
+                                  value={grades[s.id]?.feedback || ''}
+                                  onChange={(e) => setGrades(prev => ({ ...prev, [s.id]: { ...prev[s.id], feedback: e.target.value } }))}
+                                  className="flex-1 min-w-[120px] px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                />
+                                <button
+                                  onClick={() => handleGrade(s.id)}
+                                  className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition"
+                                >
+                                  Save
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
           {assignments.length === 0 && (
             <div className="text-center py-20 bg-white dark:bg-gray-800 rounded-3xl border border-dashed border-gray-300 dark:border-gray-600">
               <span className="text-6xl">📋</span>

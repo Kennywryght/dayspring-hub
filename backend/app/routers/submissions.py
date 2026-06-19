@@ -4,6 +4,9 @@ from app.database import supabase
 from app.utils.auth import get_current_user
 import uuid
 from datetime import datetime, timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/submissions", tags=["Submissions"])
 
@@ -86,7 +89,7 @@ async def get_submissions(assignment_id: str, current_user: dict = Depends(get_c
     result = supabase.table("submissions").select("*, students(display_name)").eq("assignment_id", assignment_id).execute()
     return result.data
 
-# NEW: Teacher grade a submission
+# Teacher grade a submission (FIXED)
 @router.put("/{submission_id}/grade/")
 async def grade_submission(
     submission_id: str,
@@ -97,24 +100,45 @@ async def grade_submission(
     if current_user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can grade")
     
-    # Verify the submission exists and the teacher owns the assignment
-    sub = supabase.table("submissions").select("*, assignments!inner(teacher_id)").eq("id", submission_id).single().execute()
-    if not sub.data:
-        raise HTTPException(status_code=404, detail="Submission not found")
-    if sub.data["assignments"]["teacher_id"] != current_user["user_id"]:
-        raise HTTPException(status_code=403, detail="Not your assignment")
+    try:
+        # Verify the submission exists and the teacher owns the assignment
+        sub = supabase.table("submissions").select("*, assignments!inner(teacher_id)").eq("id", submission_id).single().execute()
+        if not sub.data:
+            raise HTTPException(status_code=404, detail="Submission not found")
+        if sub.data["assignments"]["teacher_id"] != current_user["user_id"]:
+            raise HTTPException(status_code=403, detail="Not your assignment")
+        
+        # Build update data - only include fields that are provided
+        update_data = {}
+        if grade is not None and grade != '':
+            update_data["grade"] = grade
+        
+        # Only add feedback if the column exists in the database
+        if feedback is not None and feedback != '':
+            try:
+                # Try updating with feedback
+                update_data_with_feedback = {**update_data, "feedback": feedback}
+                supabase.table("submissions").update(update_data_with_feedback).eq("id", submission_id).execute()
+                return {"message": "Grade saved with feedback"}
+            except Exception as e:
+                # If feedback column doesn't exist, just update grade
+                logger.warning(f"Feedback column may not exist: {e}")
+                if update_data:
+                    supabase.table("submissions").update(update_data).eq("id", submission_id).execute()
+                    return {"message": "Grade saved (feedback column not available)"}
+        else:
+            # Just update grade (no feedback provided)
+            if update_data:
+                supabase.table("submissions").update(update_data).eq("id", submission_id).execute()
+                return {"message": "Grade saved"}
+            else:
+                raise HTTPException(status_code=400, detail="No data to update")
     
-    update_data = {}
-    if grade is not None:
-        update_data["grade"] = grade
-    if feedback is not None:
-        update_data["feedback"] = feedback
-    
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No data to update")
-    
-    supabase.table("submissions").update(update_data).eq("id", submission_id).execute()
-    return {"message": "Grade saved"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error grading submission: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Parent: view a child's submission for a specific assignment
 @router.get("/student/{student_id}/{assignment_id}/")
