@@ -23,31 +23,33 @@ export default function StudentDashboard() {
 
   // Quiz feature states
   const [availableQuizzes, setAvailableQuizzes] = useState([]);
+  const [quizSubmissions, setQuizSubmissions] = useState([]);
   const [activeQuiz, setActiveQuiz] = useState(null);
   const [quizQuestions, setQuizQuestions] = useState([]);
   const [responses, setResponses] = useState({});
-  const [quizSubmitted, setQuizSubmitted] = useState(false);
 
   useEffect(() => {
     if (!user || user.role !== 'student') {
       navigate('/login');
       return;
     }
-    if (tab === 'quizzes') {
-      fetchAvailableQuizzes();
-    } else {
-      fetchData();
-    }
-  }, [tab, user]);
+    fetchData();
+  }, [user]);
 
   const fetchData = async () => {
     const headers = { Authorization: `Bearer ${user.access_token}` };
-    const [matRes, assRes, annRes] = await Promise.all([
+    
+    // Fetch all data in parallel
+    const [matRes, assRes, annRes, quizRes, subRes] = await Promise.all([
       fetch(`${API_URL}materials/`, { headers }),
       fetch(`${API_URL}assignments/`, { headers }),
       fetch(`${API_URL}announcements/`, { headers }),
+      fetch(`${API_URL}quizzes/available`, { headers }),
+      fetch(`${API_URL}quizzes/submissions`, { headers }),
     ]);
+    
     if (matRes.ok) setMaterials(await matRes.json());
+    
     if (assRes.ok) {
       const assData = await assRes.json();
       setAssignments(assData);
@@ -61,25 +63,15 @@ export default function StudentDashboard() {
         }
       });
     }
+    
     if (annRes.ok) {
       const annData = await annRes.json();
       setAnnouncements(annData);
       updateNotifications('student', annData, 'announcements');
     }
-  };
-
-  const fetchAvailableQuizzes = async () => {
-    try {
-      const res = await fetch(`${API_URL}quizzes/available`, {
-        headers: { Authorization: `Bearer ${user.access_token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAvailableQuizzes(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch quizzes', err);
-    }
+    
+    if (quizRes.ok) setAvailableQuizzes(await quizRes.json());
+    if (subRes.ok) setQuizSubmissions(await subRes.json());
   };
 
   const startQuiz = async (quizId) => {
@@ -92,7 +84,6 @@ export default function StudentDashboard() {
         setActiveQuiz(data.quiz);
         setQuizQuestions(data.questions);
         setResponses({});
-        setQuizSubmitted(false);
       } else {
         showMsg('Failed to load quiz', 'error');
       }
@@ -127,10 +118,8 @@ export default function StudentDashboard() {
 
       if (res.ok) {
         showMsg('Quiz submitted successfully!');
-        setQuizSubmitted(true);
         setActiveQuiz(null);
-        // Refresh available quizzes to remove completed? (optional)
-        fetchAvailableQuizzes();
+        fetchData(); // Re-fetch all data to update submissions
       } else {
         const err = await res.json().catch(() => ({}));
         showMsg(err.detail || 'Submission failed', 'error');
@@ -165,14 +154,21 @@ export default function StudentDashboard() {
     }
   };
 
+  // Check if a quiz is submitted
+  const isQuizSubmitted = (quizId) => {
+    return quizSubmissions.some(s => s.quiz_id === quizId && s.submitted);
+  };
+
   // Home tab data
   const totalAssignments = assignments.length;
-  const submittedCount = Object.values(submissionStatus).filter(s => s === 'submitted').length;
+  const submittedAssignments = Object.values(submissionStatus).filter(s => s === 'submitted').length;
+  const totalQuizzes = availableQuizzes.length;
+  const submittedQuizzes = quizSubmissions.filter(s => s.submitted).length;
+  const pendingQuizzes = totalQuizzes - submittedQuizzes;
   const upcomingDeadlines = assignments
     .filter(a => a.deadline && new Date(a.deadline) > new Date())
     .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
     .slice(0, 3);
-  const recentMaterials = materials.slice(0, 3);
   const recentAnnouncements = announcements.slice(0, 2);
 
   const navLinks = [
@@ -206,7 +202,7 @@ export default function StudentDashboard() {
       {tab === 'home' && (
         <div className="space-y-8 animate-fade-in-up">
           {/* Quick stats */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl p-5 shadow-xl text-white">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-sm font-semibold opacity-90">Materials</p>
@@ -219,15 +215,66 @@ export default function StudentDashboard() {
                 <p className="text-sm font-semibold opacity-90">Assignments</p>
                 <span className="text-2xl">📝</span>
               </div>
-              <p className="text-3xl md:text-4xl font-black">{totalAssignments}</p>
+              <p className="text-3xl md:text-4xl font-black">{submittedAssignments}/{totalAssignments}</p>
             </div>
             <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-5 shadow-xl text-white">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-semibold opacity-90">Submitted</p>
+                <p className="text-sm font-semibold opacity-90">Quizzes Done</p>
                 <span className="text-2xl">✅</span>
               </div>
-              <p className="text-3xl md:text-4xl font-black">{submittedCount}/{totalAssignments}</p>
+              <p className="text-3xl md:text-4xl font-black">{submittedQuizzes}/{totalQuizzes}</p>
             </div>
+            <div className="bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl p-5 shadow-xl text-white">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold opacity-90">Pending Quiz</p>
+                <span className="text-2xl">⏳</span>
+              </div>
+              <p className="text-3xl md:text-4xl font-black">{pendingQuizzes}</p>
+            </div>
+          </div>
+
+          {/* Quiz Progress Section */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <span>🧠</span> Quiz Progress
+            </h3>
+            
+            {availableQuizzes.length === 0 ? (
+              <p className="text-gray-400 dark:text-gray-500 text-sm">No quizzes available yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {availableQuizzes.map(quiz => {
+                  const submitted = isQuizSubmitted(quiz.id);
+                  return (
+                    <div key={quiz.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{submitted ? '✅' : '📝'}</span>
+                        <div>
+                          <p className="font-medium text-gray-800 dark:text-gray-200">{quiz.title}</p>
+                          {quiz.description && (
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{quiz.description}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {submitted ? (
+                          <span className="text-green-600 dark:text-green-400 text-sm font-semibold">
+                            Submitted ✅
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => startQuiz(quiz.id)}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition"
+                          >
+                            Take Quiz
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -408,7 +455,7 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      {/* ===== QUIZZES TAB (NEW) ===== */}
+      {/* ===== QUIZZES TAB ===== */}
       {tab === 'quizzes' && (
         <div className="space-y-8 animate-fade-in-up">
           <div className="flex items-center gap-3 mb-4">
@@ -421,31 +468,29 @@ export default function StudentDashboard() {
               {availableQuizzes.length === 0 ? (
                 <div className="text-center py-20 bg-white dark:bg-gray-800 rounded-3xl border border-dashed border-gray-300 dark:border-gray-600">
                   <span className="text-6xl">📭</span>
-                  <p className="text-gray-400 dark:text-gray-500 mt-4 text-lg font-medium">
-                    No quizzes available yet.
-                  </p>
+                  <p className="text-gray-400 dark:text-gray-500 mt-4 text-lg font-medium">No quizzes available yet.</p>
                 </div>
               ) : (
                 <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                   {availableQuizzes.map(quiz => (
-                    <div
-                      key={quiz.id}
-                      className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 hover:shadow-lg transition-all duration-300"
-                    >
-                      <h3 className="font-bold text-xl text-gray-900 dark:text-white mb-2">
-                        {quiz.title}
-                      </h3>
+                    <div key={quiz.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 hover:shadow-lg transition-all duration-300">
+                      <h3 className="font-bold text-xl text-gray-900 dark:text-white mb-2">{quiz.title}</h3>
                       {quiz.description && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                          {quiz.description}
-                        </p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{quiz.description}</p>
                       )}
-                      <button
-                        onClick={() => startQuiz(quiz.id)}
-                        className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all duration-200"
-                      >
-                        Start Quiz
-                      </button>
+                      {isQuizSubmitted(quiz.id) ? (
+                        <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                          <span>✅</span>
+                          <span className="font-semibold text-sm">Completed</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => startQuiz(quiz.id)}
+                          className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all duration-200"
+                        >
+                          Start Quiz
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -454,68 +499,38 @@ export default function StudentDashboard() {
           ) : (
             <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 md:p-8">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {activeQuiz.title}
-                </h2>
-                <button
-                  onClick={() => setActiveQuiz(null)}
-                  className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-sm font-medium"
-                >
-                  Cancel
-                </button>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{activeQuiz.title}</h2>
+                <button onClick={() => setActiveQuiz(null)} className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-sm font-medium">Cancel</button>
               </div>
-              {activeQuiz.description && (
-                <p className="text-gray-600 dark:text-gray-300 mb-8">
-                  {activeQuiz.description}
-                </p>
-              )}
+              {activeQuiz.description && <p className="text-gray-600 dark:text-gray-300 mb-8">{activeQuiz.description}</p>}
 
               <div className="space-y-8">
                 {quizQuestions.map((q, idx) => (
-                  <div
-                    key={q.id}
-                    className="border border-gray-200 dark:border-gray-700 rounded-2xl p-5"
-                  >
-                    <p className="font-semibold text-lg text-gray-800 dark:text-gray-200 mb-3">
-                      {idx + 1}. {q.question_text}
-                    </p>
+                  <div key={q.id} className="border border-gray-200 dark:border-gray-700 rounded-2xl p-5">
+                    <p className="font-semibold text-lg text-gray-800 dark:text-gray-200 mb-3">{idx + 1}. {q.question_text}</p>
                     {q.question_type === 'multiple_choice' ? (
                       <div className="space-y-2">
                         {q.options.map(opt => (
-                          <label
-                            key={opt.id}
-                            className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors"
-                          >
-                            <input
-                              type="radio"
-                              name={`question-${q.id}`}
-                              value={opt.id}
+                          <label key={opt.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors">
+                            <input type="radio" name={`question-${q.id}`} value={opt.id}
                               checked={responses[q.id]?.selected_option_id === opt.id}
                               onChange={() => handleAnswerChange(q.id, opt.id, 'option')}
-                              className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
-                            />
-                            <span className="text-gray-700 dark:text-gray-200 text-sm">
-                              {opt.option_text}
-                            </span>
+                              className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500" />
+                            <span className="text-gray-700 dark:text-gray-200 text-sm">{opt.option_text}</span>
                           </label>
                         ))}
                       </div>
                     ) : (
-                      <textarea
-                        value={responses[q.id]?.text_answer || ''}
+                      <textarea value={responses[q.id]?.text_answer || ''}
                         onChange={(e) => handleAnswerChange(q.id, e.target.value, 'text')}
-                        placeholder="Type your answer..."
-                        rows={3}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400"
-                      />
+                        placeholder="Type your answer..." rows={3}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-900 outline-none transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400" />
                     )}
                   </div>
                 ))}
 
-                <button
-                  onClick={submitQuiz}
-                  className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold px-8 py-3.5 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] active:scale-95"
-                >
+                <button onClick={submitQuiz}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold px-8 py-3.5 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] active:scale-95">
                   Submit Answers
                 </button>
               </div>
@@ -524,7 +539,6 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      {/* Animations */}
       <style>{`
         @keyframes fade-in-up {
           from { opacity: 0; transform: translateY(20px); }

@@ -64,14 +64,21 @@ export default function TeacherDashboard() {
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentPass, setNewStudentPass] = useState('');
 
-  // ----- NEW: Quiz feature state -----
+  // Quiz feature state
   const [quizTitle, setQuizTitle] = useState('');
   const [quizDesc, setQuizDesc] = useState('');
   const [questions, setQuestions] = useState([
     { text: '', type: 'multiple_choice', options: ['', '', '', ''], correctIndex: 0 }
   ]);
   const [quizzes, setQuizzes] = useState([]);
-  // -----------------------------------
+
+  // Quiz grading state (NEW)
+  const [quizSubmissions, setQuizSubmissions] = useState([]);
+  const [selectedQuizForGrading, setSelectedQuizForGrading] = useState(null);
+  const [quizGrades, setQuizGrades] = useState({});
+  const [gradingView, setGradingView] = useState(null);
+  const [studentAnswers, setStudentAnswers] = useState([]);
+  const [gradingStudentId, setGradingStudentId] = useState(null);
 
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('success');
@@ -125,6 +132,13 @@ export default function TeacherDashboard() {
 
   useEffect(() => {
     if (selectedClassId) {
+      fetchData();
+      fetchQuizzes();
+    }
+  }, [selectedClassId]);
+
+  useEffect(() => {
+    if (selectedClassId) {
       if (tab === 'quizzes') {
         fetchQuizzes();
       } else {
@@ -150,7 +164,7 @@ export default function TeacherDashboard() {
     if (studRes.ok) setStudents(await studRes.json());
   };
 
-  // ----- NEW: Quiz API functions -----
+  // Quiz API functions
   const fetchQuizzes = async () => {
     try {
       const res = await fetch(`${API_URL}quizzes/`, {
@@ -165,6 +179,84 @@ export default function TeacherDashboard() {
     } catch (err) {
       console.error('Failed to fetch quizzes', err);
       setQuizzes([]);
+    }
+  };
+
+  // NEW: Fetch quiz submissions
+  const fetchQuizSubmissions = async (quizId) => {
+    try {
+      const res = await fetch(`${API_URL}quizzes/${quizId}/submissions`, {
+        headers: { Authorization: `Bearer ${user.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setQuizSubmissions(data);
+        setSelectedQuizForGrading(quizId);
+        setGradingView('submissions');
+      } else {
+        showMsg('Failed to fetch submissions', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to fetch quiz submissions:', err);
+      showMsg('Failed to fetch submissions', 'error');
+    }
+  };
+
+  // NEW: Fetch student answers for grading
+  const fetchStudentQuizAnswers = async (studentId) => {
+    try {
+      setGradingStudentId(studentId);
+      const res = await fetch(`${API_URL}quizzes/submissions/${studentId}/answers`, {
+        headers: { Authorization: `Bearer ${user.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStudentAnswers(data.answers || []);
+        setGradingView('grade');
+        const initial = {};
+        (data.answers || []).forEach(a => {
+          initial[a.id] = { points: a.points || '', feedback: a.feedback || '' };
+        });
+        setQuizGrades(initial);
+      } else {
+        showMsg('Failed to fetch answers', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to fetch answers:', err);
+      showMsg('Failed to fetch answers', 'error');
+    }
+  };
+
+  // NEW: Submit quiz grades
+  const submitQuizGrades = async () => {
+    if (!gradingStudentId) return;
+    try {
+      const gradesArray = Object.entries(quizGrades).map(([answerId, grade]) => ({
+        answer_id: parseInt(answerId),
+        points: parseFloat(grade.points) || 0,
+        feedback: grade.feedback || '',
+      }));
+
+      const res = await fetch(`${API_URL}quizzes/submissions/${gradingStudentId}/grade`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.access_token}`
+        },
+        body: JSON.stringify({ grades: gradesArray })
+      });
+
+      if (res.ok) {
+        showMsg('Grades saved successfully!');
+        setGradingView('submissions');
+        setGradingStudentId(null);
+        fetchQuizSubmissions(selectedQuizForGrading);
+      } else {
+        showMsg('Failed to save grades', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to save grades:', err);
+      showMsg('Failed to save grades', 'error');
     }
   };
 
@@ -285,7 +377,6 @@ export default function TeacherDashboard() {
       showMsg('Delete failed', 'error');
     }
   };
-  // ----------------------------------
 
   const showMsg = (text, type = 'success') => {
     setMsg(text);
@@ -293,7 +384,7 @@ export default function TeacherDashboard() {
     setTimeout(() => setMsg(''), 3000);
   };
 
-  // ✅ Upload material
+  // Upload material
   const handleUploadMaterial = async (e) => {
     e.preventDefault();
     const formData = new FormData();
@@ -329,7 +420,7 @@ export default function TeacherDashboard() {
     fetchData();
   };
 
-  // ✅ Create assignment
+  // Create assignment
   const handleCreateAssignment = async (e) => {
     e.preventDefault();
     const formData = new FormData();
@@ -397,7 +488,7 @@ export default function TeacherDashboard() {
     else showMsg('Failed to save grade', 'error');
   };
 
-  // ✅ Post announcement
+  // Post announcement
   const handlePostAnnouncement = async (e) => {
     e.preventDefault();
     const res = await fetch(`${API_URL}announcements/`, {
@@ -440,6 +531,8 @@ export default function TeacherDashboard() {
   const totalStudents = students.length;
   const totalMaterials = materials.length;
   const totalAssignments = assignments.length;
+  const publishedQuizzes = quizzes.filter(q => q.is_published).length;
+  const draftQuizzes = quizzes.filter(q => !q.is_published).length;
   const upcomingDeadlines = assignments
     .filter(a => a.deadline && new Date(a.deadline) > new Date())
     .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
@@ -452,7 +545,7 @@ export default function TeacherDashboard() {
     { label: 'Assignments', onClick: () => setTab('assignments') },
     { label: 'Announcements', onClick: () => setTab('announcements') },
     { label: 'Students', onClick: () => setTab('students') },
-    { label: 'Quizzes', onClick: () => setTab('quizzes') },   // new
+    { label: 'Quizzes', onClick: () => setTab('quizzes') },
   ];
 
   return (
@@ -486,15 +579,130 @@ export default function TeacherDashboard() {
         </div>
       )}
 
+      {/* ===== QUIZ GRADING MODAL (Renders above all tabs) ===== */}
+      {gradingView && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-y-auto p-6 md:p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                {gradingView === 'submissions' ? 'Quiz Submissions' : 'Grade Answers'}
+              </h2>
+              <button
+                onClick={() => { setGradingView(null); setSelectedQuizForGrading(null); setGradingStudentId(null); }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            {gradingView === 'submissions' && (
+              <div className="space-y-3">
+                {quizSubmissions.length === 0 ? (
+                  <p className="text-gray-500 dark:text-gray-400 text-center py-8">No submissions yet.</p>
+                ) : (
+                  quizSubmissions.map(sub => (
+                    <div key={sub.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                      <div>
+                        <p className="font-medium text-gray-800 dark:text-gray-200">
+                          {sub.student_name || 'Student'}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Submitted: {new Date(sub.submitted_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => fetchStudentQuizAnswers(sub.id)}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition"
+                        >
+                          Grade
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {gradingView === 'grade' && (
+              <div className="space-y-6">
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  Grade each answer below. Points will be totaled automatically.
+                </p>
+                
+                {studentAnswers.map((answer, idx) => (
+                  <div key={answer.id} className="border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+                    <p className="font-semibold text-gray-800 dark:text-gray-200 mb-2">
+                      {idx + 1}. {answer.questions?.question_text || `Question ${idx + 1}`}
+                    </p>
+                    
+                    {answer.questions?.question_type === 'multiple_choice' ? (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                        Student selected option ID: {answer.selected_option_id}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 bg-gray-100 dark:bg-gray-600 p-3 rounded-lg">
+                        {answer.text_answer || 'No answer provided'}
+                      </p>
+                    )}
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                          Points
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="e.g. 5"
+                          value={quizGrades[answer.id]?.points || ''}
+                          onChange={(e) => setQuizGrades(prev => ({
+                            ...prev,
+                            [answer.id]: { ...prev[answer.id], points: e.target.value }
+                          }))}
+                          className="w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                          Feedback
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Optional feedback"
+                          value={quizGrades[answer.id]?.feedback || ''}
+                          onChange={(e) => setQuizGrades(prev => ({
+                            ...prev,
+                            [answer.id]: { ...prev[answer.id], feedback: e.target.value }
+                          }))}
+                          className="w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <button
+                  onClick={submitQuizGrades}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold px-8 py-3.5 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300"
+                >
+                  Save All Grades
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ===== HOME TAB ===== */}
       {tab === 'home' && (
         <div className="space-y-8 animate-fade-in-up">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {[
               { label: 'Students', value: totalStudents, icon: '👩‍🎓', color: 'from-blue-600 to-indigo-600' },
               { label: 'Materials', value: totalMaterials, icon: '📚', color: 'from-emerald-500 to-teal-600' },
               { label: 'Assignments', value: totalAssignments, icon: '📝', color: 'from-purple-600 to-violet-600' },
-              { label: 'Announcements', value: announcements.length, icon: '📢', color: 'from-orange-500 to-amber-600' },
+              { label: 'Quizzes', value: publishedQuizzes, icon: '🧠', color: 'from-pink-500 to-rose-600' },
+              { label: 'Drafts', value: draftQuizzes, icon: '📋', color: 'from-orange-500 to-amber-600' },
             ].map(({ label, value, icon, color }) => (
               <div key={label} className={`bg-gradient-to-br ${color} rounded-2xl p-5 shadow-xl text-white`}>
                 <div className="flex items-center justify-between mb-3">
@@ -504,6 +712,51 @@ export default function TeacherDashboard() {
                 <p className="text-3xl md:text-4xl font-black">{value}</p>
               </div>
             ))}
+          </div>
+
+          {/* Quiz Overview Section */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <span>🧠</span> Quiz Overview
+            </h3>
+            
+            {quizzes.length === 0 ? (
+              <p className="text-gray-400 dark:text-gray-500 text-sm">No quizzes created yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {quizzes.map(quiz => (
+                  <div key={quiz.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{quiz.is_published ? '📋' : '📝'}</span>
+                      <div>
+                        <p className="font-medium text-gray-800 dark:text-gray-200">{quiz.title}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {quiz.is_published ? 'Published' : 'Draft'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {quiz.is_published && (
+                        <button
+                          onClick={() => fetchQuizSubmissions(quiz.id)}
+                          className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition"
+                        >
+                          View Submissions
+                        </button>
+                      )}
+                      {!quiz.is_published && (
+                        <button
+                          onClick={() => publishQuiz(quiz.id)}
+                          className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-green-200 transition"
+                        >
+                          Publish
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -933,7 +1186,7 @@ export default function TeacherDashboard() {
         </div>
       )}
 
-      {/* ===== NEW: QUIZZES TAB ===== */}
+      {/* ===== QUIZZES TAB ===== */}
       {tab === 'quizzes' && (
         <div className="space-y-8 animate-fade-in-up">
           {/* Create Quiz Form */}
@@ -1045,6 +1298,12 @@ export default function TeacherDashboard() {
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
+                      {quiz.is_published && (
+                        <button onClick={() => fetchQuizSubmissions(quiz.id)}
+                          className="text-indigo-600 dark:text-indigo-400 text-sm font-semibold hover:underline">
+                          View Submissions
+                        </button>
+                      )}
                       {!quiz.is_published && (
                         <button onClick={() => publishQuiz(quiz.id)}
                           className="text-green-600 dark:text-green-400 text-sm font-semibold hover:underline">
