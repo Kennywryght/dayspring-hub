@@ -66,69 +66,65 @@ export default function LandingPage() {
   };
 
   const featureItems = [
-    { icon: '📚', title: 'Learning Materials', desc: 'Teachers upload PDFs, videos, and notes accessible anytime.', color: 'blue' },
-    { icon: '✏️', title: 'Assignments', desc: 'Students submit work digitally with streamlined review.', color: 'green' },
-    { icon: '📢', title: 'Announcements', desc: 'Important school updates delivered in real time.', color: 'purple' },
+    { icon: '📚', title: 'Learning Materials', desc: 'Teachers upload PDFs, videos, and notes accessible anytime.' },
+    { icon: '✏️', title: 'Assignments', desc: 'Students submit work digitally with streamlined review.' },
+    { icon: '📢', title: 'Announcements', desc: 'Important school updates delivered in real time.' },
   ];
 
   return (
     <div className="flex flex-col min-h-screen bg-white dark:bg-gray-900 overflow-hidden relative transition-colors duration-300">
       {/* Install App Prompt */}
       {showInstallPrompt && (
-        <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 animate-slide-up w-[calc(100%-2rem)] max-w-md">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 flex items-center gap-3 sm:gap-4">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-xl sm:text-2xl flex-shrink-0 shadow-lg">
+        <div className="fixed bottom-4 left-2 right-2 sm:bottom-6 sm:left-auto sm:right-auto sm:left-1/2 sm:-translate-x-1/2 z-50 animate-slide-up sm:max-w-md">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-xl flex-shrink-0 shadow-lg">
               📱
             </div>
             <div className="flex-1 min-w-0">
               <h4 className="font-bold text-gray-900 dark:text-white text-sm">Get the App</h4>
               <p className="text-xs text-gray-500 dark:text-gray-400 truncate">Install Dayspring Hub on your device</p>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button onClick={handleInstall}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold shadow-lg transition-all duration-300 active:scale-95 whitespace-nowrap">
-                Install
-              </button>
-              <button onClick={dismissInstall}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+            <button onClick={handleInstall}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-lg transition-all duration-300 active:scale-95 whitespace-nowrap flex-shrink-0">
+              Install
+            </button>
+            <button onClick={dismissInstall}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex-shrink-0">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
       )}
 
       <div className="relative z-10 flex flex-col min-h-screen">
         {/* Animated floating blobs */}
-        <div className="absolute top-0 left-0 w-48 sm:w-72 h-48 sm:h-72 bg-blue-200 dark:bg-blue-900/60 rounded-full blur-3xl opacity-30 dark:opacity-20 animate-float-left" />
-        <div className="absolute bottom-0 right-0 w-64 sm:w-96 h-64 sm:h-96 bg-purple-200 dark:bg-purple-900/60 rounded-full blur-3xl opacity-30 dark:opacity-20 animate-float-right" />
+        <div className="absolute top-0 left-0 w-48 h-48 bg-blue-200 dark:bg-blue-900/60 rounded-full blur-3xl opacity-30 dark:opacity-20 animate-float-left" />
+        <div className="absolute bottom-0 right-0 w-64 h-64 bg-purple-200 dark:bg-purple-900/60 rounded-full blur-3xl opacity-30 dark:opacity-20 animate-float-right" />
 
         {/* Navbar */}
         <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/70 dark:bg-gray-900/70 border-b border-gray-100 dark:border-gray-800 animate-slide-down">
-          <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex justify-between items-center">
-            <div className="flex items-center gap-2 sm:gap-3 cursor-pointer transition-transform hover:scale-105">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl overflow-hidden border-2 border-blue-200 dark:border-blue-500/30 shadow-md flex-shrink-0">
+          <nav className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div className="flex items-center gap-2 cursor-pointer">
+              <div className="w-10 h-10 rounded-xl overflow-hidden border-2 border-blue-200 dark:border-blue-500/30 shadow-md flex-shrink-0">
                 <img src="/logo.jpg" alt="Dayspring Hub Logo" className="w-full h-full object-cover" />
               </div>
-              <span className="text-lg sm:text-2xl font-black tracking-tight text-gray-900 dark:text-white">
-                Dayspring
-                <span className="text-blue-600 dark:text-blue-400"> Hub</span>
+              <span className="text-lg font-black tracking-tight text-gray-900 dark:text-white">
+                Dayspring<span className="text-blue-600 dark:text-blue-400"> Hub</span>
               </span>
             </div>
 
-            <div className="hidden md:flex items-center gap-2 sm:gap-3">
+            <div className="hidden md:flex items-center gap-3">
               <button onClick={handleInstall}
-                className="flex items-center gap-1.5 sm:gap-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl font-semibold text-sm transition-all duration-300 hover:scale-105 active:scale-95">
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2.5 rounded-2xl font-semibold text-sm transition-all duration-300 hover:scale-105 active:scale-95">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
-                <span className="hidden sm:inline">Install App</span>
-                <span className="sm:hidden">Install</span>
+                Install App
               </button>
               <button onClick={() => handleNavigate('/login')}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:opacity-90 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl font-semibold text-sm sm:text-base shadow-lg transition-all duration-300 hover:scale-105 active:scale-95">
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:opacity-90 text-white px-5 py-2.5 rounded-2xl font-semibold text-sm shadow-lg transition-all duration-300 hover:scale-105 active:scale-95">
                 Sign In
               </button>
             </div>
@@ -163,13 +159,13 @@ export default function LandingPage() {
         {/* Main content */}
         <main className="flex-grow relative">
           {/* Hero Section */}
-          <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-12 sm:pt-16 md:pt-24 pb-12 sm:pb-16 md:pb-20">
+          <section className="max-w-7xl mx-auto px-4 pt-8 pb-12 sm:pt-16 sm:pb-16 md:pt-24 md:pb-20">
             <div className="grid lg:grid-cols-2 gap-8 sm:gap-12 lg:gap-16 items-center">
               {/* Left content */}
-              <div className="animate-fade-in-left">
-                <div className="inline-flex items-center gap-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded-full px-3 sm:px-5 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold mb-4 sm:mb-8">
-                  <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-blue-600 animate-ping" />
-                  Trusted Digital Learning Platform
+              <div className="animate-fade-in-left text-center sm:text-left">
+                <div className="inline-flex items-center gap-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded-full px-3 py-1.5 text-xs sm:text-sm font-semibold mb-4 sm:mb-8 mx-auto sm:mx-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping" />
+                  <span className="whitespace-nowrap">Trusted Digital Learning Platform</span>
                 </div>
 
                 <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-black text-gray-900 dark:text-white leading-tight tracking-tight">
@@ -179,38 +175,39 @@ export default function LandingPage() {
                   </span>
                 </h1>
 
-                <p className="mt-4 sm:mt-6 md:mt-8 text-base sm:text-lg md:text-xl text-gray-600 dark:text-gray-300 leading-relaxed max-w-2xl">
-                  A modern education platform connecting teachers, students,
-                  parents, and administrators in one seamless digital ecosystem.
+                <p className="mt-4 sm:mt-6 md:mt-8 text-sm sm:text-base md:text-lg text-gray-600 dark:text-gray-300 leading-relaxed max-w-2xl">
+                  A modern education platform connecting teachers, students, parents, and administrators in one seamless digital ecosystem.
                 </p>
 
-                {/* Buttons - RESPONSIVE FIX */}
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-5 mt-6 sm:mt-8 md:mt-10 w-full">
-                  <button
-                    onClick={() => handleNavigate('/login')}
-                    className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:opacity-90 text-white px-6 sm:px-8 py-3.5 sm:py-4 rounded-2xl text-base sm:text-lg font-semibold shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 text-center"
-                  >
-                    Get Started
-                  </button>
-                  <a
-                    href="#features"
-                    onClick={playClick}
-                    className="w-full sm:w-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-blue-200 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 px-6 sm:px-8 py-3.5 sm:py-4 rounded-2xl text-base sm:text-lg font-semibold transition-all duration-300 text-center hover:scale-105 active:scale-95"
-                  >
-                    Learn More
-                  </button>
+                {/* Buttons */}
+                <div className="mt-6 sm:mt-8 md:mt-10">
+                  <div className="flex flex-col sm:flex-row gap-3 w-full">
+                    <button
+                      onClick={() => handleNavigate('/login')}
+                      className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-4 rounded-2xl text-base font-bold shadow-xl hover:shadow-2xl transition-all duration-300 active:scale-95 text-center"
+                    >
+                      Get Started
+                    </button>
+                    <a
+                      href="#features"
+                      onClick={playClick}
+                      className="w-full sm:w-auto bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 text-gray-700 dark:text-gray-300 px-8 py-4 rounded-2xl text-base font-bold transition-all duration-300 text-center active:scale-95"
+                    >
+                      Learn More
+                    </a>
+                  </div>
                 </div>
 
                 {/* Stats */}
-                <div className="flex flex-wrap gap-6 sm:gap-10 mt-8 sm:mt-12 md:mt-14">
+                <div className="flex justify-center sm:justify-start flex-wrap gap-6 mt-8 sm:mt-12">
                   {[
                     { value: '24/7', label: 'Access Anywhere' },
                     { value: '100%', label: 'Digital Learning' },
                     { value: '4 Roles', label: 'Unified Platform' },
                   ].map((stat, i) => (
-                    <div key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 0.2}s` }}>
-                      <h3 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white">{stat.value}</h3>
-                      <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400">{stat.label}</p>
+                    <div key={i} className="animate-fade-in-up text-center sm:text-left" style={{ animationDelay: `${i * 0.2}s` }}>
+                      <h3 className="text-xl sm:text-3xl font-black text-gray-900 dark:text-white">{stat.value}</h3>
+                      <p className="text-xs sm:text-base text-gray-500 dark:text-gray-400">{stat.label}</p>
                     </div>
                   ))}
                 </div>
@@ -226,12 +223,12 @@ export default function LandingPage() {
                         { icon: '✏️', title: 'Assignment Tracking', desc: 'Submit and review work easily', bg: 'bg-green-50 dark:bg-green-900/30' },
                         { icon: '📢', title: 'Real-Time Updates', desc: 'School announcements instantly', bg: 'bg-purple-50 dark:bg-purple-900/30' },
                       ].map((item, idx) => (
-                        <div key={idx} className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl sm:rounded-2xl ${item.bg} animate-fade-in-up`}
+                        <div key={idx} className={`flex items-center gap-3 p-3 rounded-xl sm:rounded-2xl ${item.bg} animate-fade-in-up`}
                           style={{ animationDelay: `${idx * 0.15}s` }}>
                           <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-lg sm:text-2xl flex-shrink-0">
                             {item.icon}
                           </div>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <h3 className="font-bold text-sm sm:text-base text-gray-900 dark:text-white">{item.title}</h3>
                             <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">{item.desc}</p>
                           </div>
@@ -245,12 +242,12 @@ export default function LandingPage() {
           </section>
 
           {/* Features Section */}
-          <section ref={featuresRef} id="features" className="max-w-7xl mx-auto px-4 sm:px-6 pb-16 sm:pb-20 md:pb-24">
+          <section ref={featuresRef} id="features" className="max-w-7xl mx-auto px-4 pb-16 sm:pb-20 md:pb-24">
             <div className={`text-center mb-10 sm:mb-16 ${featuresVisible ? 'animate-fade-in-up' : 'opacity-0'}`}>
               <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 dark:text-white">
                 Everything You Need
               </h2>
-              <p className="mt-3 sm:mt-4 text-sm sm:text-base md:text-lg text-gray-500 dark:text-gray-400 max-w-2xl mx-auto px-4">
+              <p className="mt-3 sm:mt-4 text-sm sm:text-base text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
                 Designed to simplify communication, learning, and school management.
               </p>
             </div>
@@ -275,7 +272,7 @@ export default function LandingPage() {
 
         {/* Footer */}
         <footer className="border-t border-gray-100 dark:border-gray-800 bg-gray-50/80 dark:bg-gray-800/50 backdrop-blur-sm py-6 sm:py-8 text-center">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="max-w-7xl mx-auto px-4">
             <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
               © {new Date().getFullYear()} Dayspring Student Support Hub. All rights reserved.
             </p>
