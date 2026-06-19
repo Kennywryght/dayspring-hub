@@ -478,3 +478,170 @@ async def delete_quiz(quiz_id: int, user=Depends(get_current_user)):
         .execute()
 
     return {"detail": "Quiz deleted successfully"}
+
+# ── TEACHER: Get all graded submissions for a quiz ───────────
+
+@router.get("/{quiz_id}/results")
+async def get_quiz_results(quiz_id: int, user=Depends(get_current_user)):
+    """Get all student results for a quiz (teacher view)"""
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Only teachers can view results")
+    
+    try:
+        # Verify teacher owns this quiz
+        quiz = supabase.table("quizzes") \
+            .select("*") \
+            .eq("id", quiz_id) \
+            .eq("teacher_id", user["user_id"]) \
+            .single() \
+            .execute()
+        
+        if not quiz.data:
+            raise HTTPException(status_code=404, detail="Quiz not found")
+        
+        # Get all questions for this quiz
+        questions = supabase.table("questions") \
+            .select("id, question_text, order") \
+            .eq("quiz_id", quiz_id) \
+            .order("order") \
+            .execute()
+        
+        total_possible = len(questions.data) * 5  # Assuming 5 points per question, adjust as needed
+        
+        # Get all responses grouped by student
+        responses = supabase.table("student_responses") \
+            .select("*, questions!inner(quiz_id)") \
+            .eq("questions.quiz_id", quiz_id) \
+            .execute()
+        
+        # Group by student and calculate scores
+        students = {}
+        for r in responses.data:
+            sid = r["student_id"]
+            if sid not in students:
+                try:
+                    student = supabase.table("students") \
+                        .select("display_name, student_number") \
+                        .eq("id", sid) \
+                        .single() \
+                        .execute()
+                    student_name = student.data["display_name"] if student.data else "Unknown"
+                    student_number = student.data.get("student_number", "N/A") if student.data else "N/A"
+                except Exception:
+                    student_name = "Unknown"
+                    student_number = "N/A"
+                
+                students[sid] = {
+                    "student_id": sid,
+                    "student_name": student_name,
+                    "student_number": student_number,
+                    "total_points": 0,
+                    "answers": [],
+                    "graded_count": 0,
+                    "total_questions": len(questions.data),
+                }
+            
+            students[sid]["answers"].append({
+                "question_id": r["question_id"],
+                "points": r.get("points"),
+                "feedback": r.get("feedback"),
+                "text_answer": r.get("text_answer"),
+                "selected_option_id": r.get("selected_option_id"),
+            })
+            
+            if r.get("points") is not None:
+                students[sid]["total_points"] += float(r["points"])
+                students[sid]["graded_count"] += 1
+        
+        return {
+            "quiz_title": quiz.data["title"],
+            "total_possible": total_possible,
+            "students": list(students.values()),
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching quiz results: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── STUDENT: Get my result for a specific quiz ──────────────
+
+@router.get("/{quiz_id}/my-result")
+async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
+    """Get a student's result for a specific quiz"""
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can view results")
+    
+    try:
+        student_db_id = await get_student_db_id(user)
+        
+        # Get quiz info
+        quiz = supabase.table("quizzes") \
+            .select("id, title") \
+            .eq("id", quiz_id) \
+            .single() \
+            .execute()
+        
+        if not quiz.data:
+            raise HTTPException(status_code=404, detail="Quiz not found")
+        
+        # Get all responses with questions
+        responses = supabase.table("student_responses") \
+            .select("*, questions(question_text, question_type, order)") \
+            .eq("student_id", student_db_id) \
+            .eq("questions.quiz_id", quiz_id) \
+            .order("questions.order") \
+            .execute()
+        
+        if not responses.data:
+            return {
+                "quiz_title": quiz.data["title"],
+                "submitted": False,
+                "total_points": 0,
+                "total_possible": 0,
+                "answers": [],
+            }
+        
+        # Get total questions
+        questions_count = supabase.table("questions") \
+            .select("id", count="exact") \
+            .eq("quiz_id", quiz_id) \
+            .execute()
+        
+        total_questions = questions_count.count if hasattr(questions_count, 'count') else len(responses.data)
+        
+        total_points = 0
+        graded_count = 0
+        answers = []
+        
+        for r in responses.data:
+            answer_data = {
+                "question_id": r["question_id"],
+                "question_text": r.get("questions", {}).get("question_text", ""),
+                "question_type": r.get("questions", {}).get("question_type", ""),
+                "points": r.get("points"),
+                "feedback": r.get("feedback"),
+                "text_answer": r.get("text_answer"),
+                "selected_option_id": r.get("selected_option_id"),
+            }
+            answers.append(answer_data)
+            
+            if r.get("points") is not None:
+                total_points += float(r["points"])
+                graded_count += 1
+        
+        return {
+            "quiz_title": quiz.data["title"],
+            "submitted": True,
+            "total_points": total_points,
+            "total_possible": total_questions * 5,  # Adjust points per question as needed
+            "graded_count": graded_count,
+            "total_questions": total_questions,
+            "answers": answers,
+        }
+    
+    except Exception as e:
+        logger.error(f"Error fetching student result: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

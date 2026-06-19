@@ -72,13 +72,17 @@ export default function TeacherDashboard() {
   ]);
   const [quizzes, setQuizzes] = useState([]);
 
-  // Quiz grading state (NEW)
+  // Quiz grading state
   const [quizSubmissions, setQuizSubmissions] = useState([]);
   const [selectedQuizForGrading, setSelectedQuizForGrading] = useState(null);
   const [quizGrades, setQuizGrades] = useState({});
   const [gradingView, setGradingView] = useState(null);
   const [studentAnswers, setStudentAnswers] = useState([]);
   const [gradingStudentId, setGradingStudentId] = useState(null);
+
+  // Quiz results state
+  const [quizResults, setQuizResults] = useState(null);
+  const [resultsView, setResultsView] = useState(null);
 
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('success');
@@ -182,7 +186,7 @@ export default function TeacherDashboard() {
     }
   };
 
-  // NEW: Fetch quiz submissions
+  // Fetch quiz submissions
   const fetchQuizSubmissions = async (quizId) => {
     try {
       const res = await fetch(`${API_URL}quizzes/${quizId}/submissions`, {
@@ -202,7 +206,7 @@ export default function TeacherDashboard() {
     }
   };
 
-  // NEW: Fetch student answers for grading
+  // Fetch student answers for grading
   const fetchStudentQuizAnswers = async (studentId) => {
     try {
       setGradingStudentId(studentId);
@@ -227,7 +231,7 @@ export default function TeacherDashboard() {
     }
   };
 
-  // NEW: Submit quiz grades
+  // Submit quiz grades
   const submitQuizGrades = async () => {
     if (!gradingStudentId) return;
     try {
@@ -257,6 +261,25 @@ export default function TeacherDashboard() {
     } catch (err) {
       console.error('Failed to save grades:', err);
       showMsg('Failed to save grades', 'error');
+    }
+  };
+
+  // Fetch quiz results
+  const fetchQuizResults = async (quizId) => {
+    try {
+      const res = await fetch(`${API_URL}quizzes/${quizId}/results`, {
+        headers: { Authorization: `Bearer ${user.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setQuizResults(data);
+        setResultsView('results');
+      } else {
+        showMsg('Failed to fetch results', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to fetch quiz results:', err);
+      showMsg('Failed to fetch results', 'error');
     }
   };
 
@@ -579,7 +602,7 @@ export default function TeacherDashboard() {
         </div>
       )}
 
-      {/* ===== QUIZ GRADING MODAL (Renders above all tabs) ===== */}
+      {/* ===== QUIZ GRADING MODAL ===== */}
       {gradingView && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-y-auto p-6 md:p-8">
@@ -607,7 +630,7 @@ export default function TeacherDashboard() {
                           {sub.student_name || 'Student'}
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Submitted: {new Date(sub.submitted_at).toLocaleDateString()}
+                          Submitted
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
@@ -693,6 +716,87 @@ export default function TeacherDashboard() {
         </div>
       )}
 
+      {/* ===== QUIZ RESULTS MODAL ===== */}
+      {resultsView === 'results' && quizResults && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-4xl w-full max-h-[80vh] overflow-y-auto p-6 md:p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                📊 Results: {quizResults.quiz_title}
+              </h2>
+              <button
+                onClick={() => { setResultsView(null); setQuizResults(null); }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Total possible points: {quizResults.total_possible}
+            </p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-gray-100 dark:bg-gray-700">
+                    <th className="px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Student</th>
+                    <th className="px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Score</th>
+                    <th className="px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Progress</th>
+                    <th className="px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {quizResults.students.map(student => {
+                    const percentage = quizResults.total_possible > 0 
+                      ? Math.round((student.total_points / quizResults.total_possible) * 100) 
+                      : 0;
+                    const fullyGraded = student.graded_count === student.total_questions;
+                  
+                    return (
+                      <tr key={student.student_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-800 dark:text-gray-200">{student.student_name}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{student.student_number}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="font-bold text-lg text-gray-900 dark:text-white">
+                            {student.total_points}
+                          </span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            /{quizResults.total_possible}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="w-32 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full ${percentage >= 70 ? 'bg-green-500' : percentage >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">{percentage}%</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {fullyGraded ? (
+                            <span className="text-green-600 dark:text-green-400 text-xs font-semibold">✅ Graded</span>
+                          ) : student.graded_count > 0 ? (
+                            <span className="text-amber-600 dark:text-amber-400 text-xs font-semibold">
+                              ⏳ {student.graded_count}/{student.total_questions} graded
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 dark:text-gray-500 text-xs">Not graded</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ===== HOME TAB ===== */}
       {tab === 'home' && (
         <div className="space-y-8 animate-fade-in-up">
@@ -737,12 +841,20 @@ export default function TeacherDashboard() {
                     </div>
                     <div className="flex items-center gap-2">
                       {quiz.is_published && (
-                        <button
-                          onClick={() => fetchQuizSubmissions(quiz.id)}
-                          className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition"
-                        >
-                          View Submissions
-                        </button>
+                        <>
+                          <button
+                            onClick={() => fetchQuizSubmissions(quiz.id)}
+                            className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-3 py-1.5 rounded-xl text-xs font-semibold hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition"
+                          >
+                            Submissions
+                          </button>
+                          <button
+                            onClick={() => fetchQuizResults(quiz.id)}
+                            className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-3 py-1.5 rounded-xl text-xs font-semibold hover:bg-green-200 dark:hover:bg-green-900/50 transition"
+                          >
+                            Results
+                          </button>
+                        </>
                       )}
                       {!quiz.is_published && (
                         <button
@@ -1299,10 +1411,16 @@ export default function TeacherDashboard() {
                     </div>
                     <div className="flex items-center gap-3">
                       {quiz.is_published && (
-                        <button onClick={() => fetchQuizSubmissions(quiz.id)}
-                          className="text-indigo-600 dark:text-indigo-400 text-sm font-semibold hover:underline">
-                          View Submissions
-                        </button>
+                        <>
+                          <button onClick={() => fetchQuizSubmissions(quiz.id)}
+                            className="text-indigo-600 dark:text-indigo-400 text-sm font-semibold hover:underline">
+                            Submissions
+                          </button>
+                          <button onClick={() => fetchQuizResults(quiz.id)}
+                            className="text-green-600 dark:text-green-400 text-sm font-semibold hover:underline">
+                            Results
+                          </button>
+                        </>
                       )}
                       {!quiz.is_published && (
                         <button onClick={() => publishQuiz(quiz.id)}
