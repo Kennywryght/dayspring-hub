@@ -398,7 +398,7 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
             .select("*, questions!inner(quiz_id, question_text, question_type, order)") \
             .eq("student_id", student_db_id) \
             .eq("questions.quiz_id", quiz_id) \
-            .order("questions.order") \
+            .order("order") \
             .execute()
         
         logger.info(f"Found {len(responses.data)} responses for student {student_db_id}, quiz {quiz_id}")

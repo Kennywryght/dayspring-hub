@@ -229,8 +229,8 @@ export default function TeacherDashboard() {
       } else {
         showMsg('Failed to fetch answers', 'error');
       }
-    } catch (err) {
-      console.error('Failed to fetch answers:', err);
+    } catch (_err) {
+      console.error('Failed to fetch answers:', _err);
       showMsg('Failed to fetch answers', 'error');
     }
   };
@@ -262,8 +262,8 @@ export default function TeacherDashboard() {
       } else {
         showMsg('Failed to save grades', 'error');
       }
-    } catch (err) {
-      console.error('Failed to save grades:', err);
+    } catch (_err) {
+      console.error('Failed to save grades:', _err);
       showMsg('Failed to save grades', 'error');
     }
   };
@@ -281,8 +281,8 @@ export default function TeacherDashboard() {
       } else {
         showMsg('Failed to fetch results', 'error');
       }
-    } catch (err) {
-      console.error('Failed to fetch quiz results:', err);
+    } catch (_err) {
+      console.error('Failed to fetch quiz results:', _err);
       showMsg('Failed to fetch results', 'error');
     }
   };
