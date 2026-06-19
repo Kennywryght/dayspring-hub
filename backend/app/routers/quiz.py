@@ -80,7 +80,6 @@ async def get_student_db_id(user):
 # FIXED-PATH ROUTES (no path parameters) - MUST BE FIRST
 # ═══════════════════════════════════════════════════════════════
 
-# ── TEACHER: Create Quiz ────────────────────────────────────
 @router.post("/", response_model=QuizOut)
 async def create_quiz(quiz_data: QuizCreate, user=Depends(get_current_user)):
     if user["role"] != "teacher":
@@ -128,7 +127,6 @@ async def create_quiz(quiz_data: QuizCreate, user=Depends(get_current_user)):
     }
 
 
-# ── TEACHER: List My Quizzes ────────────────────────────────
 @router.get("/", response_model=List[QuizOut])
 async def list_my_quizzes(user=Depends(get_current_user)):
     if user["role"] != "teacher":
@@ -140,7 +138,6 @@ async def list_my_quizzes(user=Depends(get_current_user)):
     return quizzes.data
 
 
-# ── STUDENT: /available ─────────────────────────────────────
 @router.get("/available")
 async def available_quizzes(user=Depends(get_current_user)):
     if user["role"] != "student":
@@ -157,7 +154,6 @@ async def available_quizzes(user=Depends(get_current_user)):
     return quizzes.data
 
 
-# ── STUDENT: /submissions (my submissions) ──────────────────
 @router.get("/submissions")
 async def get_my_submissions(user=Depends(get_current_user)):
     """Get student's quiz submissions"""
@@ -187,7 +183,6 @@ async def get_my_submissions(user=Depends(get_current_user)):
     return list(submissions.values())
 
 
-# ── TEACHER: /submissions/{submission_id}/answers ───────────
 @router.get("/submissions/{submission_id}/answers")
 async def get_submission_answers(submission_id: str, user=Depends(get_current_user)):
     """Teacher: Get a student's answers for grading"""
@@ -209,10 +204,9 @@ async def get_submission_answers(submission_id: str, user=Depends(get_current_us
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── TEACHER: /submissions/{submission_id}/grade ─────────────
 @router.put("/submissions/{submission_id}/grade")
 async def grade_submission(submission_id: str, payload: GradePayload, user=Depends(get_current_user)):
-    """Teacher: Grade a student's quiz answers"""
+    """Teacher: Grade a student's quiz answers (also works for re-grading)"""
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can grade submissions")
     
@@ -223,7 +217,7 @@ async def grade_submission(submission_id: str, payload: GradePayload, user=Depen
             if grade.points is not None:
                 update_data["points"] = float(grade.points)
             
-            if grade.feedback:
+            if grade.feedback is not None:
                 update_data["feedback"] = grade.feedback
             
             if update_data:
@@ -246,7 +240,6 @@ async def grade_submission(submission_id: str, payload: GradePayload, user=Depen
 # PARAMETERISED ROUTES – with {quiz_id} – ALL LAST
 # ═══════════════════════════════════════════════════════════════
 
-# ── TEACHER: /{quiz_id}/submissions ─────────────────────────
 @router.get("/{quiz_id}/submissions")
 async def get_quiz_submissions(quiz_id: int, user=Depends(get_current_user)):
     """Teacher: Get all submissions for a quiz"""
@@ -298,7 +291,6 @@ async def get_quiz_submissions(quiz_id: int, user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── TEACHER: /{quiz_id}/results ─────────────────────────────
 @router.get("/{quiz_id}/results")
 async def get_quiz_results(quiz_id: int, user=Depends(get_current_user)):
     """Teacher: Get all student results for a quiz"""
@@ -371,7 +363,6 @@ async def get_quiz_results(quiz_id: int, user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── STUDENT: /{quiz_id}/my-result ───────────────────────────
 @router.get("/{quiz_id}/my-result")
 async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
     """Student: Get my result for a specific quiz"""
@@ -380,7 +371,9 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
     
     try:
         student_db_id = await get_student_db_id(user)
+        logger.info(f"Fetching result for student {student_db_id}, quiz {quiz_id}")
         
+        # Get quiz info
         quiz = supabase.table("quizzes") \
             .select("id, title") \
             .eq("id", quiz_id) \
@@ -390,44 +383,47 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
         if not quiz.data:
             raise HTTPException(status_code=404, detail="Quiz not found")
         
-        responses = supabase.table("student_responses") \
-            .select("*, questions(question_text, question_type, order)") \
-            .eq("student_id", student_db_id) \
+        # Get questions for this quiz
+        questions = supabase.table("questions") \
+            .select("id, question_text, question_type, order") \
+            .eq("quiz_id", quiz_id) \
+            .order("order") \
             .execute()
         
-        # Filter responses for this quiz
-        quiz_responses = []
-        for r in responses.data:
-            if r.get("questions") and r["questions"].get("quiz_id") == quiz_id:
-                quiz_responses.append(r)
+        total_questions = len(questions.data)
         
-        if not quiz_responses:
+        # Get student responses for THIS quiz only
+        # We need to join through questions to filter by quiz_id
+        responses = supabase.table("student_responses") \
+            .select("*, questions!inner(quiz_id, question_text, question_type, order)") \
+            .eq("student_id", student_db_id) \
+            .eq("questions.quiz_id", quiz_id) \
+            .order("questions.order") \
+            .execute()
+        
+        logger.info(f"Found {len(responses.data)} responses for student {student_db_id}, quiz {quiz_id}")
+        
+        if not responses.data:
             return {
                 "quiz_title": quiz.data["title"],
                 "submitted": False,
                 "total_points": 0,
-                "total_possible": 0,
+                "total_possible": total_questions * 5,
                 "graded_count": 0,
-                "total_questions": 0,
+                "total_questions": total_questions,
                 "answers": [],
             }
-        
-        questions_count = supabase.table("questions") \
-            .select("id") \
-            .eq("quiz_id", quiz_id) \
-            .execute()
-        
-        total_questions = len(questions_count.data)
         
         total_points = 0
         graded_count = 0
         answers = []
         
-        for r in quiz_responses:
+        for r in responses.data:
+            q_data = r.get("questions", {})
             answer_data = {
                 "question_id": r["question_id"],
-                "question_text": r.get("questions", {}).get("question_text", ""),
-                "question_type": r.get("questions", {}).get("question_type", ""),
+                "question_text": q_data.get("question_text", ""),
+                "question_type": q_data.get("question_type", ""),
                 "points": r.get("points"),
                 "feedback": r.get("feedback"),
                 "text_answer": r.get("text_answer"),
@@ -439,7 +435,7 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
                 total_points += float(r["points"])
                 graded_count += 1
         
-        return {
+        result = {
             "quiz_title": quiz.data["title"],
             "submitted": True,
             "total_points": total_points,
@@ -448,13 +444,15 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
             "total_questions": total_questions,
             "answers": answers,
         }
+        
+        logger.info(f"Returning result: {result['total_points']}/{result['total_possible']}")
+        return result
     
     except Exception as e:
         logger.error(f"Error fetching student result: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── TEACHER: /{quiz_id}/questions ───────────────────────────
 @router.get("/{quiz_id}/questions")
 async def get_quiz_questions(quiz_id: int, user=Depends(get_current_user)):
     if user["role"] != "teacher":
@@ -482,7 +480,6 @@ async def get_quiz_questions(quiz_id: int, user=Depends(get_current_user)):
     }
 
 
-# ── STUDENT: /{quiz_id}/take ────────────────────────────────
 @router.get("/{quiz_id}/take")
 async def take_quiz(quiz_id: int, user=Depends(get_current_user)):
     if user["role"] != "student":
@@ -523,7 +520,6 @@ async def take_quiz(quiz_id: int, user=Depends(get_current_user)):
     }
 
 
-# ── STUDENT: /{quiz_id}/submit ──────────────────────────────
 @router.post("/{quiz_id}/submit")
 async def submit_quiz(quiz_id: int, payload: SubmissionPayload, user=Depends(get_current_user)):
     try:
@@ -580,7 +576,6 @@ async def submit_quiz(quiz_id: int, payload: SubmissionPayload, user=Depends(get
         )
 
 
-# ── TEACHER: /{quiz_id}/publish ─────────────────────────────
 @router.put("/{quiz_id}/publish")
 async def publish_quiz(quiz_id: int, user=Depends(get_current_user)):
     if user["role"] != "teacher":
@@ -598,7 +593,6 @@ async def publish_quiz(quiz_id: int, user=Depends(get_current_user)):
     return {"detail": "Quiz published successfully"}
 
 
-# ── TEACHER: /{quiz_id} DELETE ──────────────────────────────
 @router.delete("/{quiz_id}")
 async def delete_quiz(quiz_id: int, user=Depends(get_current_user)):
     if user["role"] != "teacher":

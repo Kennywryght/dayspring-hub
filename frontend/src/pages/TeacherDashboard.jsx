@@ -217,9 +217,13 @@ export default function TeacherDashboard() {
         const data = await res.json();
         setStudentAnswers(data.answers || []);
         setGradingView('grade');
+        // Pre-fill with existing grades (for re-grading)
         const initial = {};
         (data.answers || []).forEach(a => {
-          initial[a.id] = { points: a.points || '', feedback: a.feedback || '' };
+          initial[a.id] = { 
+            points: a.points !== null && a.points !== undefined ? a.points : '', 
+            feedback: a.feedback || '' 
+          };
         });
         setQuizGrades(initial);
       } else {
