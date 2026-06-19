@@ -82,7 +82,7 @@ async def get_student_db_id(user):
 # Otherwise FastAPI interprets "submissions" as a {quiz_id}
 # ═══════════════════════════════════════════════════════════════
 
-# ── TEACHER: fixed-path routes ──────────────────────────────
+# ── TEACHER: Create Quiz ────────────────────────────────────
 
 @router.post("/", response_model=QuizOut)
 async def create_quiz(quiz_data: QuizCreate, user=Depends(get_current_user)):
@@ -130,6 +130,8 @@ async def create_quiz(quiz_data: QuizCreate, user=Depends(get_current_user)):
         "created_at": str(quiz_row["created_at"]),
     }
 
+
+# ── TEACHER: List My Quizzes ────────────────────────────────
 
 @router.get("/", response_model=List[QuizOut])
 async def list_my_quizzes(user=Depends(get_current_user)):
@@ -186,14 +188,14 @@ async def get_my_submissions(user=Depends(get_current_user)):
                 submissions[quiz_id] = {
                     "quiz_id": quiz_id,
                     "submitted": True,
-                    "submitted_at": r.get("created_at"),
+                    "submitted_at": r.get("submitted_at"),
                 }
     
     logger.info(f"Found submissions for quizzes: {list(submissions.keys())}")
     return list(submissions.values())
 
 
-# ── STUDENT: /submissions/{submission_id}/answers (teacher views) ─
+# ── TEACHER: /submissions/{submission_id}/answers ───────────
 
 @router.get("/submissions/{submission_id}/answers")
 async def get_submission_answers(submission_id: str, user=Depends(get_current_user)):
@@ -201,18 +203,22 @@ async def get_submission_answers(submission_id: str, user=Depends(get_current_us
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can view answers")
     
-    responses = supabase.table("student_responses") \
-        .select("*, questions(question_text, question_type)") \
-        .eq("student_id", submission_id) \
-        .execute()
-    
-    return {
-        "submission_id": submission_id,
-        "answers": responses.data
-    }
+    try:
+        responses = supabase.table("student_responses") \
+            .select("*, questions(question_text, question_type)") \
+            .eq("student_id", submission_id) \
+            .execute()
+        
+        return {
+            "submission_id": submission_id,
+            "answers": responses.data
+        }
+    except Exception as e:
+        logger.error(f"Error fetching answers: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── TEACHER: /submissions/{submission_id}/grade ─
+# ── TEACHER: /submissions/{submission_id}/grade ─────────────
 
 @router.put("/submissions/{submission_id}/grade")
 async def grade_submission(submission_id: str, payload: GradePayload, user=Depends(get_current_user)):
@@ -220,23 +226,27 @@ async def grade_submission(submission_id: str, payload: GradePayload, user=Depen
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can grade submissions")
     
-    for grade in payload.grades:
-        supabase.table("student_responses") \
-            .update({
-                "points": grade.points,
-                "feedback": grade.feedback
-            }) \
-            .eq("id", grade.answer_id) \
-            .execute()
-    
-    return {"detail": "Grades saved successfully"}
+    try:
+        for grade in payload.grades:
+            supabase.table("student_responses") \
+                .update({
+                    "points": grade.points,
+                    "feedback": grade.feedback
+                }) \
+                .eq("id", grade.answer_id) \
+                .execute()
+        
+        return {"detail": "Grades saved successfully"}
+    except Exception as e:
+        logger.error(f"Error saving grades: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ═══════════════════════════════════════════════════════════════
 # PARAMETERISED ROUTES – with {quiz_id} – ALWAYS LAST
 # ═══════════════════════════════════════════════════════════════
 
-# ── TEACHER: /{quiz_id}/submissions ─
+# ── TEACHER: /{quiz_id}/submissions ─────────────────────────
 
 @router.get("/{quiz_id}/submissions")
 async def get_quiz_submissions(quiz_id: int, user=Depends(get_current_user)):
@@ -244,42 +254,58 @@ async def get_quiz_submissions(quiz_id: int, user=Depends(get_current_user)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can view submissions")
     
-    quiz = supabase.table("quizzes") \
-        .select("*") \
-        .eq("id", quiz_id) \
-        .eq("teacher_id", user["user_id"]) \
-        .single() \
-        .execute()
+    try:
+        # Verify teacher owns this quiz
+        quiz = supabase.table("quizzes") \
+            .select("*") \
+            .eq("id", quiz_id) \
+            .eq("teacher_id", user["user_id"]) \
+            .single() \
+            .execute()
+        
+        if not quiz.data:
+            raise HTTPException(status_code=404, detail="Quiz not found")
+        
+        # Get all unique students who submitted
+        # Note: student_responses doesn't have created_at, so we skip that field
+        responses = supabase.table("student_responses") \
+            .select("student_id, questions!inner(quiz_id)") \
+            .eq("questions.quiz_id", quiz_id) \
+            .execute()
+        
+        # Group by student (deduplicate)
+        students = {}
+        for r in responses.data:
+            sid = r["student_id"]
+            if sid not in students:
+                # Get student name from students table
+                try:
+                    student = supabase.table("students") \
+                        .select("display_name") \
+                        .eq("id", sid) \
+                        .single() \
+                        .execute()
+                    
+                    student_name = student.data["display_name"] if student.data else "Unknown"
+                except Exception:
+                    student_name = "Unknown"
+                
+                students[sid] = {
+                    "id": sid,
+                    "student_name": student_name,
+                    "submitted_at": None,  # We don't have created_at in student_responses
+                }
+        
+        return list(students.values())
     
-    if not quiz.data:
-        raise HTTPException(status_code=404, detail="Quiz not found")
-    
-    responses = supabase.table("student_responses") \
-        .select("student_id, created_at, questions!inner(quiz_id)") \
-        .eq("questions.quiz_id", quiz_id) \
-        .execute()
-    
-    # Group by student
-    students = {}
-    for r in responses.data:
-        sid = r["student_id"]
-        if sid not in students:
-            student = supabase.table("students") \
-                .select("display_name") \
-                .eq("id", sid) \
-                .single() \
-                .execute()
-            
-            students[sid] = {
-                "id": sid,
-                "student_name": student.data["display_name"] if student.data else "Unknown",
-                "submitted_at": r["created_at"],
-            }
-    
-    return list(students.values())
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching quiz submissions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── TEACHER: /{quiz_id}/questions ─
+# ── TEACHER: /{quiz_id}/questions ───────────────────────────
 
 @router.get("/{quiz_id}/questions")
 async def get_quiz_questions(quiz_id: int, user=Depends(get_current_user)):
@@ -308,7 +334,7 @@ async def get_quiz_questions(quiz_id: int, user=Depends(get_current_user)):
     }
 
 
-# ── STUDENT: /{quiz_id}/take ─
+# ── STUDENT: /{quiz_id}/take ────────────────────────────────
 
 @router.get("/{quiz_id}/take")
 async def take_quiz(quiz_id: int, user=Depends(get_current_user)):
@@ -350,7 +376,7 @@ async def take_quiz(quiz_id: int, user=Depends(get_current_user)):
     }
 
 
-# ── STUDENT: /{quiz_id}/submit ─
+# ── STUDENT: /{quiz_id}/submit ──────────────────────────────
 
 @router.post("/{quiz_id}/submit")
 async def submit_quiz(quiz_id: int, payload: SubmissionPayload, user=Depends(get_current_user)):
@@ -408,7 +434,7 @@ async def submit_quiz(quiz_id: int, payload: SubmissionPayload, user=Depends(get
         )
 
 
-# ── TEACHER: /{quiz_id}/publish ─
+# ── TEACHER: /{quiz_id}/publish ─────────────────────────────
 
 @router.put("/{quiz_id}/publish")
 async def publish_quiz(quiz_id: int, user=Depends(get_current_user)):
@@ -427,7 +453,7 @@ async def publish_quiz(quiz_id: int, user=Depends(get_current_user)):
     return {"detail": "Quiz published successfully"}
 
 
-# ── TEACHER: /{quiz_id} DELETE ─
+# ── TEACHER: /{quiz_id} DELETE ──────────────────────────────
 
 @router.delete("/{quiz_id}")
 async def delete_quiz(quiz_id: int, user=Depends(get_current_user)):
