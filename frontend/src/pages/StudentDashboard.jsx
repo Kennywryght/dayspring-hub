@@ -28,6 +28,10 @@ export default function StudentDashboard() {
   const [quizQuestions, setQuizQuestions] = useState([]);
   const [responses, setResponses] = useState({});
 
+  // Quiz results state
+  const [myQuizResults, setMyQuizResults] = useState({});
+  const [viewingResult, setViewingResult] = useState(null);
+
   useEffect(() => {
     if (!user || user.role !== 'student') {
       navigate('/login');
@@ -39,7 +43,6 @@ export default function StudentDashboard() {
   const fetchData = async () => {
     const headers = { Authorization: `Bearer ${user.access_token}` };
     
-    // Fetch all data in parallel
     const [matRes, assRes, annRes, quizRes, subRes] = await Promise.all([
       fetch(`${API_URL}materials/`, { headers }),
       fetch(`${API_URL}assignments/`, { headers }),
@@ -71,7 +74,32 @@ export default function StudentDashboard() {
     }
     
     if (quizRes.ok) setAvailableQuizzes(await quizRes.json());
-    if (subRes.ok) setQuizSubmissions(await subRes.json());
+    
+    if (subRes.ok) {
+      const submissions = await subRes.json();
+      setQuizSubmissions(submissions);
+      // Auto-fetch results for all submitted quizzes
+      submissions.forEach(sub => {
+        if (sub.submitted) {
+          fetchMyQuizResult(sub.quiz_id);
+        }
+      });
+    }
+  };
+
+  // Fetch individual quiz result
+  const fetchMyQuizResult = async (quizId) => {
+    try {
+      const res = await fetch(`${API_URL}quizzes/${quizId}/my-result`, {
+        headers: { Authorization: `Bearer ${user.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMyQuizResults(prev => ({ ...prev, [quizId]: data }));
+      }
+    } catch (err) {
+      console.error('Failed to fetch quiz result:', err);
+    }
   };
 
   const startQuiz = async (quizId) => {
@@ -159,6 +187,19 @@ export default function StudentDashboard() {
     return quizSubmissions.some(s => s.quiz_id === quizId && s.submitted);
   };
 
+  // Grade color helpers
+  const getGradeColor = (percentage) => {
+    if (percentage >= 70) return 'text-green-600 dark:text-green-400';
+    if (percentage >= 40) return 'text-amber-600 dark:text-amber-400';
+    return 'text-red-600 dark:text-red-400';
+  };
+
+  const getGradeBg = (percentage) => {
+    if (percentage >= 70) return 'bg-green-100 dark:bg-green-900/30';
+    if (percentage >= 40) return 'bg-amber-100 dark:bg-amber-900/30';
+    return 'bg-red-100 dark:bg-red-900/30';
+  };
+
   // Home tab data
   const totalAssignments = assignments.length;
   const submittedAssignments = Object.values(submissionStatus).filter(s => s === 'submitted').length;
@@ -195,6 +236,90 @@ export default function StudentDashboard() {
           msgType === 'error' ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800' : 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800'
         }`}>
           {msgType === 'error' ? '⚠️' : '✅'} {msg}
+        </div>
+      )}
+
+      {/* ===== QUIZ RESULT DETAIL MODAL ===== */}
+      {viewingResult && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6 md:p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                📊 {viewingResult.quiz_title}
+              </h2>
+              <button
+                onClick={() => setViewingResult(null)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-gray-600 dark:text-gray-400">Your Score</span>
+                <span className="text-2xl font-black text-gray-900 dark:text-white">
+                  {viewingResult.total_points} / {viewingResult.total_possible}
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-3">
+                <div
+                  className={`h-3 rounded-full transition-all duration-500 ${
+                    viewingResult.total_possible > 0
+                      ? (viewingResult.total_points / viewingResult.total_possible) * 100 >= 70
+                        ? 'bg-green-500'
+                        : (viewingResult.total_points / viewingResult.total_possible) * 100 >= 40
+                        ? 'bg-amber-500'
+                        : 'bg-red-500'
+                      : 'bg-gray-400'
+                  }`}
+                  style={{ width: `${viewingResult.total_possible > 0 ? Math.round((viewingResult.total_points / viewingResult.total_possible) * 100) : 0}%` }}
+                />
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 text-right">
+                {viewingResult.total_possible > 0 ? Math.round((viewingResult.total_points / viewingResult.total_possible) * 100) : 0}%
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                {viewingResult.graded_count} of {viewingResult.total_questions} questions graded
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="font-semibold text-gray-800 dark:text-gray-200">Question Breakdown</h3>
+              {viewingResult.answers.map((ans, idx) => (
+                <div key={idx} className="border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+                  <p className="font-medium text-gray-800 dark:text-gray-200 text-sm mb-2">
+                    Q{idx + 1}: {ans.question_text}
+                  </p>
+                  {ans.question_type === 'multiple_choice' ? (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                      Selected option ID: {ans.selected_option_id || 'N/A'}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 bg-gray-50 dark:bg-gray-700 p-2 rounded-lg">
+                      Answer: {ans.text_answer || 'No answer provided'}
+                    </p>
+                  )}
+                  {ans.points !== null ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-green-600 dark:text-green-400">
+                        Points: {ans.points}
+                      </span>
+                      {ans.feedback && (
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          Feedback: {ans.feedback}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-amber-600 dark:text-amber-400">
+                      Not yet graded
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -245,6 +370,11 @@ export default function StudentDashboard() {
               <div className="space-y-3">
                 {availableQuizzes.map(quiz => {
                   const submitted = isQuizSubmitted(quiz.id);
+                  const result = myQuizResults[quiz.id];
+                  const percentage = result && result.total_possible > 0 
+                    ? Math.round((result.total_points / result.total_possible) * 100) 
+                    : 0;
+                  
                   return (
                     <div key={quiz.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-xl">
                       <div className="flex items-center gap-3">
@@ -254,13 +384,41 @@ export default function StudentDashboard() {
                           {quiz.description && (
                             <p className="text-sm text-gray-500 dark:text-gray-400">{quiz.description}</p>
                           )}
+                          {submitted && result && (
+                            <p className="text-xs mt-1">
+                              {result.graded_count > 0 ? (
+                                <span className={`font-semibold ${getGradeColor(percentage)}`}>
+                                  Score: {result.total_points}/{result.total_possible} ({percentage}%)
+                                  {result.graded_count < result.total_questions && ' - Partial'}
+                                </span>
+                              ) : (
+                                <span className="text-amber-600 dark:text-amber-400">Submitted - Awaiting grading</span>
+                              )}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
                         {submitted ? (
-                          <span className="text-green-600 dark:text-green-400 text-sm font-semibold">
-                            Submitted ✅
-                          </span>
+                          <>
+                            {result && result.graded_count > 0 && (
+                              <div className={`px-3 py-1 rounded-full text-xs font-semibold ${getGradeBg(percentage)} ${getGradeColor(percentage)}`}>
+                                {percentage}%
+                              </div>
+                            )}
+                            <button
+                              onClick={() => {
+                                if (result) {
+                                  setViewingResult(result);
+                                } else {
+                                  fetchMyQuizResult(quiz.id);
+                                }
+                              }}
+                              className="text-indigo-600 dark:text-indigo-400 text-sm font-semibold hover:underline"
+                            >
+                              {result ? 'View Result' : 'Load Result'}
+                            </button>
+                          </>
                         ) : (
                           <button
                             onClick={() => startQuiz(quiz.id)}
@@ -472,27 +630,77 @@ export default function StudentDashboard() {
                 </div>
               ) : (
                 <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                  {availableQuizzes.map(quiz => (
-                    <div key={quiz.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 hover:shadow-lg transition-all duration-300">
-                      <h3 className="font-bold text-xl text-gray-900 dark:text-white mb-2">{quiz.title}</h3>
-                      {quiz.description && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{quiz.description}</p>
-                      )}
-                      {isQuizSubmitted(quiz.id) ? (
-                        <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                          <span>✅</span>
-                          <span className="font-semibold text-sm">Completed</span>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => startQuiz(quiz.id)}
-                          className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all duration-200"
-                        >
-                          Start Quiz
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                  {availableQuizzes.map(quiz => {
+                    const submitted = isQuizSubmitted(quiz.id);
+                    const result = myQuizResults[quiz.id];
+                    const percentage = result && result.total_possible > 0 
+                      ? Math.round((result.total_points / result.total_possible) * 100) 
+                      : 0;
+                    
+                    return (
+                      <div key={quiz.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 hover:shadow-lg transition-all duration-300">
+                        <h3 className="font-bold text-xl text-gray-900 dark:text-white mb-2">{quiz.title}</h3>
+                        {quiz.description && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{quiz.description}</p>
+                        )}
+                        
+                        {submitted ? (
+                          <div>
+                            <div className="flex items-center gap-2 text-green-600 dark:text-green-400 mb-3">
+                              <span>✅</span>
+                              <span className="font-semibold text-sm">Completed</span>
+                            </div>
+                            
+                            {result ? (
+                              <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-3 space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">Score:</span>
+                                  <span className={`font-bold ${getGradeColor(percentage)}`}>
+                                    {result.total_points}/{result.total_possible}
+                                  </span>
+                                </div>
+                                
+                                <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                                  <div
+                                    className={`h-2 rounded-full ${
+                                      percentage >= 70 ? 'bg-green-500' : percentage >= 40 ? 'bg-amber-500' : 'bg-red-500'
+                                    }`}
+                                    style={{ width: `${percentage}%` }}
+                                  />
+                                </div>
+                                
+                                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                                  <span>{percentage}%</span>
+                                  <span>{result.graded_count}/{result.total_questions} graded</span>
+                                </div>
+                                
+                                <button
+                                  onClick={() => setViewingResult(result)}
+                                  className="w-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition mt-2"
+                                >
+                                  View Details
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => fetchMyQuizResult(quiz.id)}
+                                className="text-indigo-600 dark:text-indigo-400 text-sm font-semibold hover:underline"
+                              >
+                                Load Result
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => startQuiz(quiz.id)}
+                            className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all duration-200"
+                          >
+                            Start Quiz
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </>
