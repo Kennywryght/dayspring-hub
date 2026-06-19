@@ -50,6 +50,30 @@ class SubmissionPayload(BaseModel):
 
 
 # ─────────────────────────────────────────────────────────────────
+# Helper function to get student's database ID
+# ─────────────────────────────────────────────────────────────────
+async def get_student_db_id(user):
+    """Get the student's actual database ID from their student_number"""
+    student_number = user.get("student_id") or user.get("user_id")
+    
+    # Try to find the student in the students table
+    try:
+        student = supabase.table("students") \
+            .select("id") \
+            .eq("student_number", student_number) \
+            .single() \
+            .execute()
+        
+        if student.data:
+            return student.data["id"]
+    except Exception as e:
+        logger.warning(f"Could not find student by number {student_number}: {e}")
+    
+    # Fallback: use the user_id directly (for cases where student exists in users table)
+    return user["user_id"]
+
+
+# ─────────────────────────────────────────────────────────────────
 # TEACHER — fixed paths (no path param), safe at any position
 # ─────────────────────────────────────────────────────────────────
 
@@ -206,7 +230,7 @@ async def take_quiz(quiz_id: int, user=Depends(get_current_user)):
 @router.post("/{quiz_id}/submit")
 async def submit_quiz(quiz_id: int, payload: SubmissionPayload, user=Depends(get_current_user)):
     try:
-        logger.info(f"Quiz submission attempt - User: {user.get('user_id')}, Quiz: {quiz_id}")
+        logger.info(f"Quiz submission attempt - User: {user}, Quiz: {quiz_id}")
         
         if user["role"] != "student":
             return JSONResponse(
@@ -220,13 +244,16 @@ async def submit_quiz(quiz_id: int, payload: SubmissionPayload, user=Depends(get
                 content={"detail": "No answers provided"}
             )
 
-        # Duplicate submission check: look at all question IDs in this quiz
-        # rather than just the first answer, to avoid edge-case bypasses
+        # Get the correct student database ID
+        student_db_id = await get_student_db_id(user)
+        logger.info(f"Resolved student DB ID: {student_db_id}")
+
+        # Duplicate submission check
         question_ids = [a.question_id for a in payload.answers]
         existing = supabase.table("student_responses") \
             .select("id") \
             .in_("question_id", question_ids) \
-            .eq("student_id", user["user_id"]) \
+            .eq("student_id", student_db_id) \
             .limit(1) \
             .execute()
 
@@ -236,16 +263,17 @@ async def submit_quiz(quiz_id: int, payload: SubmissionPayload, user=Depends(get
                 content={"detail": "You have already submitted this quiz"}
             )
 
+        # Insert all answers
         for ans in payload.answers:
             response = {
                 "question_id": ans.question_id,
-                "student_id": user["user_id"],
+                "student_id": student_db_id,
                 "selected_option_id": ans.selected_option_id,
                 "text_answer": ans.text_answer,
             }
             supabase.table("student_responses").insert(response).execute()
 
-        logger.info(f"Quiz {quiz_id} submitted successfully by user {user.get('user_id')}")
+        logger.info(f"Quiz {quiz_id} submitted successfully by student {student_db_id}")
         return JSONResponse(
             content={"detail": "Answers submitted successfully"}
         )
