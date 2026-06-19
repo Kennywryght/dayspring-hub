@@ -35,6 +35,60 @@ async def delete_class(class_id: str, admin=Depends(require_admin)):
     supabase.table("classes").delete().eq("id", class_id).execute()
     return {"message": "Deleted"}
 
+# ==================== DETAILED CLASSES ====================
+@router.get("/classes/detailed/")
+async def list_classes_detailed(admin=Depends(require_admin)):
+    """Get classes with their teachers, subjects, and students"""
+    try:
+        classes = supabase.table("classes").select("*").execute()
+        
+        result = []
+        for c in classes.data:
+            # Get teachers for this class
+            assignments = supabase.table("class_teachers") \
+                .select("*, profiles(full_name), subjects(name)") \
+                .eq("class_id", c["id"]) \
+                .execute()
+            
+            teachers = []
+            for a in assignments.data:
+                teachers.append({
+                    "teacher_name": a.get("profiles", {}).get("full_name", "Unknown"),
+                    "subject_name": a.get("subjects", {}).get("name", "Unknown"),
+                })
+            
+            # Get students for this class
+            students = supabase.table("students") \
+                .select("id, display_name, student_number") \
+                .eq("class_id", c["id"]) \
+                .execute()
+            
+            # Check which students have parents
+            linked = supabase.table("student_parents").select("student_id").execute()
+            linked_ids = [row["student_id"] for row in linked.data] if linked.data else []
+            
+            student_list = []
+            for s in students.data:
+                student_list.append({
+                    "id": s["id"],
+                    "display_name": s["display_name"],
+                    "student_number": s["student_number"],
+                    "has_parent": s["id"] in linked_ids,
+                })
+            
+            result.append({
+                "id": c["id"],
+                "name": c["name"],
+                "grade": c.get("grade"),
+                "teachers": teachers,
+                "students": student_list,
+            })
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching detailed classes: {e}")
+        return []
+
 # ==================== SUBJECTS ====================
 @router.get("/subjects/")
 async def list_subjects(admin=Depends(require_admin)):
@@ -73,6 +127,63 @@ async def create_teacher(email: str, password: str, full_name: str, admin=Depend
     }).execute()
     return {"user_id": user_id, "email": email}
 
+# ==================== DETAILED TEACHERS ====================
+@router.get("/teachers/detailed/")
+async def list_teachers_detailed(admin=Depends(require_admin)):
+    """Get teachers with their email, assigned classes and subjects"""
+    try:
+        teachers = supabase.table("profiles") \
+            .select("id, full_name") \
+            .eq("role", "teacher") \
+            .execute()
+        
+        result = []
+        for t in teachers.data:
+            # Get teacher's auth email from Supabase Auth
+            email = None
+            try:
+                user = supabase.auth.admin.get_user_by_id(t["id"])
+                if user and user.user:
+                    email = user.user.email
+            except Exception as e:
+                logger.warning(f"Could not get email for teacher {t['id']}: {e}")
+            
+            # Get teacher's assignments
+            assignments = supabase.table("class_teachers") \
+                .select("*, classes(name), subjects(name)") \
+                .eq("teacher_id", t["id"]) \
+                .execute()
+            
+            classes = []
+            for a in assignments.data:
+                # Count students in this class
+                try:
+                    students = supabase.table("students") \
+                        .select("id") \
+                        .eq("class_id", a["class_id"]) \
+                        .execute()
+                    student_count = len(students.data) if students.data else 0
+                except Exception:
+                    student_count = 0
+                
+                classes.append({
+                    "class_name": a.get("classes", {}).get("name", "Unknown"),
+                    "subject_name": a.get("subjects", {}).get("name", "Unknown"),
+                    "student_count": student_count,
+                })
+            
+            result.append({
+                "id": t["id"],
+                "full_name": t["full_name"],
+                "email": email or "N/A",
+                "classes": classes,
+            })
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching detailed teachers: {e}")
+        return []
+
 # ==================== PARENTS ====================
 @router.get("/parents/")
 async def list_parents(admin=Depends(require_admin)):
@@ -105,6 +216,84 @@ async def create_parent(email: str, password: str, full_name: str, admin=Depends
         supabase.table("parents").insert({"profile_id": user_id}).execute()
 
     return {"user_id": user_id, "email": email}
+
+# ==================== DETAILED PARENTS ====================
+@router.get("/parents/detailed/")
+async def list_parents_detailed(admin=Depends(require_admin)):
+    """Get parents with their email and linked students"""
+    try:
+        parents = supabase.table("profiles") \
+            .select("id, full_name") \
+            .eq("role", "parent") \
+            .execute()
+        
+        result = []
+        for p in parents.data:
+            # Get parent's auth email
+            email = None
+            try:
+                user = supabase.auth.admin.get_user_by_id(p["id"])
+                if user and user.user:
+                    email = user.user.email
+            except Exception as e:
+                logger.warning(f"Could not get email for parent {p['id']}: {e}")
+            
+            # Get parent's linked students
+            students = []
+            try:
+                parent_rec = supabase.table("parents") \
+                    .select("id") \
+                    .eq("profile_id", p["id"]) \
+                    .execute()
+                
+                if parent_rec.data:
+                    parent_db_id = parent_rec.data[0]["id"]
+                    links = supabase.table("student_parents") \
+                        .select("student_id") \
+                        .eq("parent_id", parent_db_id) \
+                        .execute()
+                    
+                    for link in links.data:
+                        student = supabase.table("students") \
+                            .select("id, display_name, student_number, class_id") \
+                            .eq("id", link["student_id"]) \
+                            .single() \
+                            .execute()
+                        
+                        if student.data:
+                            # Get class name
+                            class_name = "No class"
+                            try:
+                                class_data = supabase.table("classes") \
+                                    .select("name") \
+                                    .eq("id", student.data["class_id"]) \
+                                    .single() \
+                                    .execute()
+                                if class_data.data:
+                                    class_name = class_data.data["name"]
+                            except Exception:
+                                pass
+                            
+                            students.append({
+                                "id": student.data["id"],
+                                "display_name": student.data["display_name"],
+                                "student_number": student.data["student_number"],
+                                "class_name": class_name,
+                            })
+            except Exception as e:
+                logger.warning(f"Error getting students for parent {p['id']}: {e}")
+            
+            result.append({
+                "id": p["id"],
+                "full_name": p["full_name"],
+                "email": email or "N/A",
+                "students": students,
+            })
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching detailed parents: {e}")
+        return []
 
 # ==================== ASSIGN TEACHER TO CLASS ====================
 @router.post("/assign/")
@@ -139,7 +328,7 @@ async def list_assignments(admin=Depends(require_admin)):
 # ==================== STUDENTS (ALL & UNASSIGNED) ====================
 @router.get("/students/")
 async def list_all_students(admin=Depends(require_admin)):
-    res = supabase.table("students").select("id, student_number, display_name").execute()
+    res = supabase.table("students").select("id, student_number, display_name, class_id").execute()
     return res.data
 
 @router.get("/students/unassigned/")
@@ -150,11 +339,11 @@ async def list_unassigned_students(admin=Depends(require_admin)):
     unassigned = [s for s in all_students.data if s["id"] not in linked_ids]
     return unassigned
 
-# ==================== LINK STUDENT TO PARENT (FIXED) ====================
+# ==================== LINK STUDENT TO PARENT ====================
 @router.post("/link-student-parent/")
 async def link_student_parent(
     student_id: str,
-    parent_id: str,  # Changed from parent_email to parent_id
+    parent_id: str,
     admin: dict = Depends(require_admin)
 ):
     try:
@@ -186,7 +375,6 @@ async def link_student_parent(
             .execute()
         
         if not parent_rec.data:
-            # Create parent record
             new_parent = supabase.table("parents").insert({"profile_id": parent_id}).execute()
             if new_parent.data:
                 parent_db_id = new_parent.data[0]["id"]
@@ -233,10 +421,11 @@ async def stats(admin=Depends(require_admin)):
         teachers = supabase.table("profiles").select("id", count="exact").eq("role", "teacher").execute()
         materials = supabase.table("materials").select("id", count="exact").execute()
         return {
-            "classes": classes.count if hasattr(classes, 'count') else 0,
-            "students": students.count if hasattr(students, 'count') else 0,
-            "teachers": teachers.count if hasattr(teachers, 'count') else 0,
-            "materials": materials.count if hasattr(materials, 'count') else 0
+            "classes": classes.count if hasattr(classes, 'count') else len(classes.data),
+            "students": students.count if hasattr(students, 'count') else len(students.data),
+            "teachers": teachers.count if hasattr(teachers, 'count') else len(teachers.data),
+            "materials": materials.count if hasattr(materials, 'count') else len(materials.data)
         }
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error fetching stats: {e}")
         return {"classes": 0, "students": 0, "teachers": 0, "materials": 0}
