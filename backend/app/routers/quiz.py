@@ -392,13 +392,12 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
         
         total_questions = len(questions.data)
         
-        # Get student responses for THIS quiz only
-        # We need to join through questions to filter by quiz_id
+        # FIXED: Don't use .order() on student_responses - it doesn't have that column
+        # Instead, get responses and sort manually by question order
         responses = supabase.table("student_responses") \
             .select("*, questions!inner(quiz_id, question_text, question_type, order)") \
             .eq("student_id", student_db_id) \
             .eq("questions.quiz_id", quiz_id) \
-            .order("order") \
             .execute()
         
         logger.info(f"Found {len(responses.data)} responses for student {student_db_id}, quiz {quiz_id}")
@@ -414,11 +413,17 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
                 "answers": [],
             }
         
+        # Sort responses by question order manually
+        sorted_responses = sorted(
+            responses.data, 
+            key=lambda r: r.get("questions", {}).get("order", 0)
+        )
+        
         total_points = 0
         graded_count = 0
         answers = []
         
-        for r in responses.data:
+        for r in sorted_responses:
             q_data = r.get("questions", {})
             answer_data = {
                 "question_id": r["question_id"],
