@@ -4,6 +4,9 @@ from typing import Optional
 from app.database import supabase
 from app.utils.auth import get_current_user
 import bcrypt
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -97,7 +100,9 @@ async def create_parent(email: str, password: str, full_name: str, admin=Depends
     }).execute()
 
     # Ensure parents record exists
-    supabase.table("parents").upsert({"profile_id": user_id}).execute()
+    existing_parent = supabase.table("parents").select("id").eq("profile_id", user_id).execute()
+    if not existing_parent.data:
+        supabase.table("parents").insert({"profile_id": user_id}).execute()
 
     return {"user_id": user_id, "email": email}
 
@@ -145,54 +150,78 @@ async def list_unassigned_students(admin=Depends(require_admin)):
     unassigned = [s for s in all_students.data if s["id"] not in linked_ids]
     return unassigned
 
-# ==================== LINK STUDENT TO PARENT ====================
+# ==================== LINK STUDENT TO PARENT (FIXED) ====================
 @router.post("/link-student-parent/")
 async def link_student_parent(
     student_id: str,
-    parent_email: str,
+    parent_id: str,  # Changed from parent_email to parent_id
     admin: dict = Depends(require_admin)
 ):
-    # 1. Find parent auth user by email
-    all_users = supabase.auth.admin.list_users()
-    parent_user = None
-    for u in all_users:
-        if u.email == parent_email:
-            parent_user = u
-            break
-    if not parent_user:
-        raise HTTPException(404, detail="Parent with this email not found")
-
-    # 2. Verify parent role
-    profile_res = supabase.table("profiles")\
-        .select("id, role")\
-        .eq("id", parent_user.id)\
-        .maybe_single()\
-        .execute()
-    if not profile_res.data or profile_res.data.get("role") != "parent":
-        raise HTTPException(404, detail="User is not a parent")
-
-    # 3. Get or create parent record
-    parent_rec = supabase.table("parents")\
-        .select("id")\
-        .eq("profile_id", parent_user.id)\
-        .maybe_single()\
-        .execute()
-    if not parent_rec.data:
-        new_parent = supabase.table("parents").insert({"profile_id": parent_user.id}).execute()
-        parent_id = new_parent.data[0]["id"]
-    else:
-        parent_id = parent_rec.data[0]["id"]
-
-    # 4. Insert link
     try:
-        supabase.table("student_parents").upsert({
+        logger.info(f"Linking student {student_id} to parent {parent_id}")
+        
+        # 1. Verify student exists
+        student = supabase.table("students") \
+            .select("id") \
+            .eq("id", student_id) \
+            .execute()
+        
+        if not student.data:
+            raise HTTPException(404, detail="Student not found")
+        
+        # 2. Verify parent profile exists and has parent role
+        profile = supabase.table("profiles") \
+            .select("id, role, full_name") \
+            .eq("id", parent_id) \
+            .eq("role", "parent") \
+            .execute()
+        
+        if not profile.data:
+            raise HTTPException(404, detail="Parent not found or user is not a parent")
+        
+        # 3. Get or create parent record in parents table
+        parent_rec = supabase.table("parents") \
+            .select("id") \
+            .eq("profile_id", parent_id) \
+            .execute()
+        
+        if not parent_rec.data:
+            # Create parent record
+            new_parent = supabase.table("parents").insert({"profile_id": parent_id}).execute()
+            if new_parent.data:
+                parent_db_id = new_parent.data[0]["id"]
+            else:
+                raise HTTPException(500, detail="Failed to create parent record")
+        else:
+            parent_db_id = parent_rec.data[0]["id"]
+        
+        # 4. Check if already linked
+        existing_link = supabase.table("student_parents") \
+            .select("id") \
+            .eq("student_id", student_id) \
+            .eq("parent_id", parent_db_id) \
+            .execute()
+        
+        if existing_link.data:
+            raise HTTPException(400, detail="Student is already linked to this parent")
+        
+        # 5. Create the link
+        link_result = supabase.table("student_parents").insert({
             "student_id": student_id,
-            "parent_id": parent_id
+            "parent_id": parent_db_id
         }).execute()
+        
+        if not link_result.data:
+            raise HTTPException(500, detail="Failed to create link")
+        
+        logger.info(f"Successfully linked student {student_id} to parent {parent_id}")
+        return {"message": "Student linked to parent successfully"}
+    
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(400, detail="Could not link (maybe already linked)")
-
-    return {"message": f"Student linked to parent {parent_email}"}
+        logger.error(f"Error linking student to parent: {str(e)}")
+        raise HTTPException(500, detail=f"Internal server error: {str(e)}")
 
 
 # ==================== STATS ====================
