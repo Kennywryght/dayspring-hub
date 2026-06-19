@@ -59,26 +59,36 @@ class GradePayload(BaseModel):
 
 # ---------- Helper Functions ----------
 async def get_student_db_id(user):
-    """Get the student's actual database ID from their student_number"""
-    student_number = user.get("student_id") or user.get("user_id")
+    """
+    Get the student's actual database ID.
+    The JWT 'student_id' field contains the student_number (e.g., 'S001').
+    We need to look up the UUID from the students table.
+    """
+    student_number = user.get("student_id")  # This is actually the student_number like "S001"
+    user_id = user.get("user_id")  # This is the UUID
     
+    if not student_number or student_number == user_id:
+        # If student_id is the same as user_id (both UUIDs), just return the UUID
+        return user_id
+    
+    # Try to find the student by student_number
     try:
         student = supabase.table("students") \
             .select("id") \
             .eq("student_number", student_number) \
-            .single() \
             .execute()
         
-        if student.data:
-            return student.data["id"]
+        if student.data and len(student.data) > 0:
+            return student.data[0]["id"]
     except Exception as e:
         logger.warning(f"Could not find student by number {student_number}: {e}")
     
-    return user["user_id"]
+    # Fallback: try using the user_id directly
+    return user_id
 
 
 # ═══════════════════════════════════════════════════════════════
-# CRITICAL: Fixed-path routes MUST come BEFORE parameterised routes
+# Fixed-path routes MUST come BEFORE parameterised routes
 # ═══════════════════════════════════════════════════════════════
 
 # ── TEACHER: Create Quiz ────────────────────────────────────
@@ -225,41 +235,28 @@ async def grade_submission(submission_id: str, payload: GradePayload, user=Depen
     
     try:
         for grade in payload.grades:
-            # Build update dict with ONLY columns that exist in the table
             update_data = {}
             
             if grade.points is not None:
-                update_data["points"] = grade.points
+                update_data["points"] = float(grade.points)
             
-            # Only include feedback if the column exists (it might not)
-            # We'll try to update feedback, and if it fails, we'll skip it
-            if grade.feedback is not None and grade.feedback != "":
-                try:
-                    # Try updating with feedback
-                    update_data_with_feedback = {**update_data, "feedback": grade.feedback}
-                    supabase.table("student_responses") \
-                        .update(update_data_with_feedback) \
-                        .eq("id", grade.answer_id) \
-                        .execute()
-                except Exception:
-                    # If feedback column doesn't exist, just update points
-                    if update_data:
-                        supabase.table("student_responses") \
-                            .update(update_data) \
-                            .eq("id", grade.answer_id) \
-                            .execute()
-            else:
-                # Just update points (no feedback)
-                if update_data:
-                    supabase.table("student_responses") \
-                        .update(update_data) \
-                        .eq("id", grade.answer_id) \
-                        .execute()
+            if grade.feedback:
+                update_data["feedback"] = grade.feedback
+            
+            if update_data:
+                logger.info(f"Updating response {grade.answer_id} with: {update_data}")
+                supabase.table("student_responses") \
+                    .update(update_data) \
+                    .eq("id", grade.answer_id) \
+                    .execute()
         
         return {"detail": "Grades saved successfully"}
     except Exception as e:
-        logger.error(f"Error saving grades: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error saving grades: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Error saving grades: {str(e)}"}
+        )
 
 
 # ═══════════════════════════════════════════════════════════════
