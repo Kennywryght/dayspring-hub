@@ -429,3 +429,84 @@ async def stats(admin=Depends(require_admin)):
     except Exception as e:
         logger.error(f"Error fetching stats: {e}")
         return {"classes": 0, "students": 0, "teachers": 0, "materials": 0}
+    
+    # ==================== DELETE/UPDATE SUBJECTS ====================
+@router.delete("/subjects/{subject_id}/")
+async def delete_subject(subject_id: str, admin=Depends(require_admin)):
+    supabase.table("subjects").delete().eq("id", subject_id).execute()
+    return {"message": "Deleted"}
+
+@router.put("/subjects/{subject_id}/")
+async def update_subject(subject_id: str, name: str, admin=Depends(require_admin)):
+    supabase.table("subjects").update({"name": name}).eq("id", subject_id).execute()
+    return {"message": "Updated"}
+
+# ==================== DELETE/UPDATE TEACHERS ====================
+@router.delete("/teachers/{teacher_id}/")
+async def delete_teacher(teacher_id: str, admin=Depends(require_admin)):
+    # Remove assignments
+    supabase.table("class_teachers").delete().eq("teacher_id", teacher_id).execute()
+    # Delete profile
+    supabase.table("profiles").delete().eq("id", teacher_id).execute()
+    return {"message": "Deleted"}
+
+@router.put("/teachers/{teacher_id}/")
+async def update_teacher(teacher_id: str, full_name: str, admin=Depends(require_admin)):
+    supabase.table("profiles").update({"full_name": full_name}).eq("id", teacher_id).execute()
+    return {"message": "Updated"}
+
+# ==================== DELETE/UPDATE PARENTS ====================
+@router.delete("/parents/{parent_id}/")
+async def delete_parent(parent_id: str, admin=Depends(require_admin)):
+    # Remove student links
+    parent_rec = supabase.table("parents").select("id").eq("profile_id", parent_id).execute()
+    if parent_rec.data:
+        supabase.table("student_parents").delete().eq("parent_id", parent_rec.data[0]["id"]).execute()
+        supabase.table("parents").delete().eq("profile_id", parent_id).execute()
+    supabase.table("profiles").delete().eq("id", parent_id).execute()
+    return {"message": "Deleted"}
+
+@router.put("/parents/{parent_id}/")
+async def update_parent(parent_id: str, full_name: str, admin=Depends(require_admin)):
+    supabase.table("profiles").update({"full_name": full_name}).eq("id", parent_id).execute()
+    return {"message": "Updated"}
+
+# ==================== DELETE/UPDATE STUDENTS ====================
+@router.delete("/students/{student_id}/")
+async def delete_student(student_id: str, admin=Depends(require_admin)):
+    supabase.table("student_parents").delete().eq("student_id", student_id).execute()
+    supabase.table("submissions").delete().eq("student_id", student_id).execute()
+    supabase.table("student_responses").delete().eq("student_id", student_id).execute()
+    supabase.table("students").delete().eq("id", student_id).execute()
+    return {"message": "Deleted"}
+
+@router.put("/students/{student_id}/")
+async def update_student(student_id: str, display_name: str = None, student_number: str = None, class_id: str = None, admin=Depends(require_admin)):
+    data = {}
+    if display_name: data["display_name"] = display_name
+    if student_number: data["student_number"] = student_number
+    if class_id: data["class_id"] = class_id
+    if data: supabase.table("students").update(data).eq("id", student_id).execute()
+    return {"message": "Updated"}
+
+# ==================== UPDATE CLASS ====================
+@router.put("/classes/{class_id}/")
+async def update_class(class_id: str, name: str, grade: str = None, admin=Depends(require_admin)):
+    data = {"name": name}
+    if grade: data["grade"] = grade
+    supabase.table("classes").update(data).eq("id", class_id).execute()
+    return {"message": "Updated"}
+
+# ==================== UNASSIGN TEACHER ====================
+@router.delete("/assign/{assignment_id}/")
+async def unassign_teacher(assignment_id: str, admin=Depends(require_admin)):
+    supabase.table("class_teachers").delete().eq("id", assignment_id).execute()
+    return {"message": "Unassigned"}
+
+# ==================== UNLINK STUDENT FROM PARENT ====================
+@router.delete("/unlink-student-parent/")
+async def unlink_student_parent(student_id: str, parent_id: str, admin=Depends(require_admin)):
+    parent_rec = supabase.table("parents").select("id").eq("profile_id", parent_id).execute()
+    if parent_rec.data:
+        supabase.table("student_parents").delete().eq("student_id", student_id).eq("parent_id", parent_rec.data[0]["id"]).execute()
+    return {"message": "Unlinked"}
