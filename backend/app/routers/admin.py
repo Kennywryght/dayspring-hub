@@ -35,55 +35,31 @@ async def delete_class(class_id: str, admin=Depends(require_admin)):
     supabase.table("classes").delete().eq("id", class_id).execute()
     return {"message": "Deleted"}
 
+@router.put("/classes/{class_id}/")
+async def update_class(class_id: str, name: str, grade: str = None, admin=Depends(require_admin)):
+    data = {"name": name}
+    if grade: data["grade"] = grade
+    supabase.table("classes").update(data).eq("id", class_id).execute()
+    return {"message": "Updated"}
+
 # ==================== DETAILED CLASSES ====================
 @router.get("/classes/detailed/")
 async def list_classes_detailed(admin=Depends(require_admin)):
-    """Get classes with their teachers, subjects, and students"""
     try:
         classes = supabase.table("classes").select("*").execute()
-        
         result = []
         for c in classes.data:
-            # Get teachers for this class
-            assignments = supabase.table("class_teachers") \
-                .select("*, profiles(full_name), subjects(name)") \
-                .eq("class_id", c["id"]) \
-                .execute()
-            
+            assignments = supabase.table("class_teachers").select("*, profiles(full_name), subjects(name)").eq("class_id", c["id"]).execute()
             teachers = []
             for a in assignments.data:
-                teachers.append({
-                    "teacher_name": a.get("profiles", {}).get("full_name", "Unknown"),
-                    "subject_name": a.get("subjects", {}).get("name", "Unknown"),
-                })
-            
-            # Get students for this class
-            students = supabase.table("students") \
-                .select("id, display_name, student_number") \
-                .eq("class_id", c["id"]) \
-                .execute()
-            
-            # Check which students have parents
+                teachers.append({"teacher_name": a.get("profiles", {}).get("full_name", "Unknown"), "subject_name": a.get("subjects", {}).get("name", "Unknown")})
+            students = supabase.table("students").select("id, display_name, student_number").eq("class_id", c["id"]).execute()
             linked = supabase.table("student_parents").select("student_id").execute()
             linked_ids = [row["student_id"] for row in linked.data] if linked.data else []
-            
             student_list = []
             for s in students.data:
-                student_list.append({
-                    "id": s["id"],
-                    "display_name": s["display_name"],
-                    "student_number": s["student_number"],
-                    "has_parent": s["id"] in linked_ids,
-                })
-            
-            result.append({
-                "id": c["id"],
-                "name": c["name"],
-                "grade": c.get("grade"),
-                "teachers": teachers,
-                "students": student_list,
-            })
-        
+                student_list.append({"id": s["id"], "display_name": s["display_name"], "student_number": s["student_number"], "has_parent": s["id"] in linked_ids})
+            result.append({"id": c["id"], "name": c["name"], "grade": c.get("grade"), "teachers": teachers, "students": student_list})
         return result
     except Exception as e:
         logger.error(f"Error fetching detailed classes: {e}")
@@ -102,6 +78,16 @@ async def create_subject(name: str, admin=Depends(require_admin)):
         return res.data[0]
     raise HTTPException(500, detail="Failed to create subject")
 
+@router.delete("/subjects/{subject_id}/")
+async def delete_subject(subject_id: str, admin=Depends(require_admin)):
+    supabase.table("subjects").delete().eq("id", subject_id).execute()
+    return {"message": "Deleted"}
+
+@router.put("/subjects/{subject_id}/")
+async def update_subject(subject_id: str, name: str, admin=Depends(require_admin)):
+    supabase.table("subjects").update({"name": name}).eq("id", subject_id).execute()
+    return {"message": "Updated"}
+
 # ==================== TEACHERS ====================
 @router.get("/teachers/")
 async def list_teachers(admin=Depends(require_admin)):
@@ -111,74 +97,44 @@ async def list_teachers(admin=Depends(require_admin)):
 @router.post("/teachers/")
 async def create_teacher(email: str, password: str, full_name: str, admin=Depends(require_admin)):
     try:
-        auth_res = supabase.auth.admin.create_user({
-            "email": email,
-            "password": password,
-            "email_confirm": True,
-            "user_metadata": {"role": "teacher", "full_name": full_name}
-        })
+        auth_res = supabase.auth.admin.create_user({"email": email, "password": password, "email_confirm": True, "user_metadata": {"role": "teacher", "full_name": full_name}})
     except Exception as e:
         raise HTTPException(400, detail=str(e))
     user_id = auth_res.user.id
-    supabase.table("profiles").insert({
-        "id": user_id,
-        "full_name": full_name,
-        "role": "teacher"
-    }).execute()
+    supabase.table("profiles").insert({"id": user_id, "full_name": full_name, "role": "teacher"}).execute()
     return {"user_id": user_id, "email": email}
 
-# ==================== DETAILED TEACHERS ====================
+@router.delete("/teachers/{teacher_id}/")
+async def delete_teacher(teacher_id: str, admin=Depends(require_admin)):
+    supabase.table("class_teachers").delete().eq("teacher_id", teacher_id).execute()
+    supabase.table("profiles").delete().eq("id", teacher_id).execute()
+    return {"message": "Deleted"}
+
+@router.put("/teachers/{teacher_id}/")
+async def update_teacher(teacher_id: str, full_name: str, admin=Depends(require_admin)):
+    supabase.table("profiles").update({"full_name": full_name}).eq("id", teacher_id).execute()
+    return {"message": "Updated"}
+
 @router.get("/teachers/detailed/")
 async def list_teachers_detailed(admin=Depends(require_admin)):
-    """Get teachers with their email, assigned classes and subjects"""
     try:
-        teachers = supabase.table("profiles") \
-            .select("id, full_name") \
-            .eq("role", "teacher") \
-            .execute()
-        
+        teachers = supabase.table("profiles").select("id, full_name").eq("role", "teacher").execute()
         result = []
         for t in teachers.data:
-            # Get teacher's auth email from Supabase Auth
             email = None
             try:
                 user = supabase.auth.admin.get_user_by_id(t["id"])
-                if user and user.user:
-                    email = user.user.email
-            except Exception as e:
-                logger.warning(f"Could not get email for teacher {t['id']}: {e}")
-            
-            # Get teacher's assignments
-            assignments = supabase.table("class_teachers") \
-                .select("*, classes(name), subjects(name)") \
-                .eq("teacher_id", t["id"]) \
-                .execute()
-            
+                if user and user.user: email = user.user.email
+            except Exception as e: logger.warning(f"Could not get email for teacher {t['id']}: {e}")
+            assignments = supabase.table("class_teachers").select("*, classes(name), subjects(name)").eq("teacher_id", t["id"]).execute()
             classes = []
             for a in assignments.data:
-                # Count students in this class
                 try:
-                    students = supabase.table("students") \
-                        .select("id") \
-                        .eq("class_id", a["class_id"]) \
-                        .execute()
+                    students = supabase.table("students").select("id").eq("class_id", a["class_id"]).execute()
                     student_count = len(students.data) if students.data else 0
-                except Exception:
-                    student_count = 0
-                
-                classes.append({
-                    "class_name": a.get("classes", {}).get("name", "Unknown"),
-                    "subject_name": a.get("subjects", {}).get("name", "Unknown"),
-                    "student_count": student_count,
-                })
-            
-            result.append({
-                "id": t["id"],
-                "full_name": t["full_name"],
-                "email": email or "N/A",
-                "classes": classes,
-            })
-        
+                except Exception: student_count = 0
+                classes.append({"class_name": a.get("classes", {}).get("name", "Unknown"), "subject_name": a.get("subjects", {}).get("name", "Unknown"), "student_count": student_count})
+            result.append({"id": t["id"], "full_name": t["full_name"], "email": email or "N/A", "classes": classes})
         return result
     except Exception as e:
         logger.error(f"Error fetching detailed teachers: {e}")
@@ -193,103 +149,58 @@ async def list_parents(admin=Depends(require_admin)):
 @router.post("/parents/")
 async def create_parent(email: str, password: str, full_name: str, admin=Depends(require_admin)):
     try:
-        auth_res = supabase.auth.admin.create_user({
-            "email": email,
-            "password": password,
-            "email_confirm": True,
-            "user_metadata": {"role": "parent", "full_name": full_name}
-        })
+        auth_res = supabase.auth.admin.create_user({"email": email, "password": password, "email_confirm": True, "user_metadata": {"role": "parent", "full_name": full_name}})
     except Exception as e:
         raise HTTPException(400, detail=str(e))
     user_id = auth_res.user.id
-
-    # Insert into profiles
-    supabase.table("profiles").insert({
-        "id": user_id,
-        "full_name": full_name,
-        "role": "parent"
-    }).execute()
-
-    # Ensure parents record exists
+    supabase.table("profiles").insert({"id": user_id, "full_name": full_name, "role": "parent"}).execute()
     existing_parent = supabase.table("parents").select("id").eq("profile_id", user_id).execute()
     if not existing_parent.data:
         supabase.table("parents").insert({"profile_id": user_id}).execute()
-
     return {"user_id": user_id, "email": email}
 
-# ==================== DETAILED PARENTS ====================
+@router.delete("/parents/{parent_id}/")
+async def delete_parent(parent_id: str, admin=Depends(require_admin)):
+    parent_rec = supabase.table("parents").select("id").eq("profile_id", parent_id).execute()
+    if parent_rec.data:
+        supabase.table("student_parents").delete().eq("parent_id", parent_rec.data[0]["id"]).execute()
+        supabase.table("parents").delete().eq("profile_id", parent_id).execute()
+    supabase.table("profiles").delete().eq("id", parent_id).execute()
+    return {"message": "Deleted"}
+
+@router.put("/parents/{parent_id}/")
+async def update_parent(parent_id: str, full_name: str, admin=Depends(require_admin)):
+    supabase.table("profiles").update({"full_name": full_name}).eq("id", parent_id).execute()
+    return {"message": "Updated"}
+
 @router.get("/parents/detailed/")
 async def list_parents_detailed(admin=Depends(require_admin)):
-    """Get parents with their email and linked students"""
     try:
-        parents = supabase.table("profiles") \
-            .select("id, full_name") \
-            .eq("role", "parent") \
-            .execute()
-        
+        parents = supabase.table("profiles").select("id, full_name").eq("role", "parent").execute()
         result = []
         for p in parents.data:
-            # Get parent's auth email
             email = None
             try:
                 user = supabase.auth.admin.get_user_by_id(p["id"])
-                if user and user.user:
-                    email = user.user.email
-            except Exception as e:
-                logger.warning(f"Could not get email for parent {p['id']}: {e}")
-            
-            # Get parent's linked students
+                if user and user.user: email = user.user.email
+            except Exception as e: logger.warning(f"Could not get email for parent {p['id']}: {e}")
             students = []
             try:
-                parent_rec = supabase.table("parents") \
-                    .select("id") \
-                    .eq("profile_id", p["id"]) \
-                    .execute()
-                
+                parent_rec = supabase.table("parents").select("id").eq("profile_id", p["id"]).execute()
                 if parent_rec.data:
                     parent_db_id = parent_rec.data[0]["id"]
-                    links = supabase.table("student_parents") \
-                        .select("student_id") \
-                        .eq("parent_id", parent_db_id) \
-                        .execute()
-                    
+                    links = supabase.table("student_parents").select("student_id").eq("parent_id", parent_db_id).execute()
                     for link in links.data:
-                        student = supabase.table("students") \
-                            .select("id, display_name, student_number, class_id") \
-                            .eq("id", link["student_id"]) \
-                            .single() \
-                            .execute()
-                        
+                        student = supabase.table("students").select("id, display_name, student_number, class_id").eq("id", link["student_id"]).single().execute()
                         if student.data:
-                            # Get class name
                             class_name = "No class"
                             try:
-                                class_data = supabase.table("classes") \
-                                    .select("name") \
-                                    .eq("id", student.data["class_id"]) \
-                                    .single() \
-                                    .execute()
-                                if class_data.data:
-                                    class_name = class_data.data["name"]
-                            except Exception:
-                                pass
-                            
-                            students.append({
-                                "id": student.data["id"],
-                                "display_name": student.data["display_name"],
-                                "student_number": student.data["student_number"],
-                                "class_name": class_name,
-                            })
-            except Exception as e:
-                logger.warning(f"Error getting students for parent {p['id']}: {e}")
-            
-            result.append({
-                "id": p["id"],
-                "full_name": p["full_name"],
-                "email": email or "N/A",
-                "students": students,
-            })
-        
+                                class_data = supabase.table("classes").select("name").eq("id", student.data["class_id"]).single().execute()
+                                if class_data.data: class_name = class_data.data["name"]
+                            except Exception: pass
+                            students.append({"id": student.data["id"], "display_name": student.data["display_name"], "student_number": student.data["student_number"], "class_name": class_name})
+            except Exception as e: logger.warning(f"Error getting students for parent {p['id']}: {e}")
+            result.append({"id": p["id"], "full_name": p["full_name"], "email": email or "N/A", "students": students})
         return result
     except Exception as e:
         logger.error(f"Error fetching detailed parents: {e}")
@@ -298,34 +209,26 @@ async def list_parents_detailed(admin=Depends(require_admin)):
 # ==================== ASSIGN TEACHER TO CLASS ====================
 @router.post("/assign/")
 async def assign_teacher(class_id: str, teacher_id: str, subject_id: str, admin=Depends(require_admin)):
-    existing = supabase.table("class_teachers")\
-        .select("id")\
-        .eq("class_id", class_id)\
-        .eq("teacher_id", teacher_id)\
-        .eq("subject_id", subject_id)\
-        .execute()
+    existing = supabase.table("class_teachers").select("id").eq("class_id", class_id).eq("teacher_id", teacher_id).eq("subject_id", subject_id).execute()
     if existing.data:
         raise HTTPException(400, detail="Already assigned")
-    res = supabase.table("class_teachers").insert({
-        "class_id": class_id,
-        "teacher_id": teacher_id,
-        "subject_id": subject_id
-    }).execute()
-    if res.data:
-        return res.data[0]
+    res = supabase.table("class_teachers").insert({"class_id": class_id, "teacher_id": teacher_id, "subject_id": subject_id}).execute()
+    if res.data: return res.data[0]
     raise HTTPException(500, detail="Failed to assign")
+
+@router.delete("/assign/{assignment_id}/")
+async def unassign_teacher(assignment_id: str, admin=Depends(require_admin)):
+    supabase.table("class_teachers").delete().eq("id", assignment_id).execute()
+    return {"message": "Unassigned"}
 
 @router.get("/assignments/")
 async def list_assignments(admin=Depends(require_admin)):
     try:
-        res = supabase.table("class_teachers")\
-            .select("*, classes!inner(name), profiles!inner(full_name), subjects!inner(name)")\
-            .execute()
+        res = supabase.table("class_teachers").select("*, classes!inner(name), profiles!inner(full_name), subjects!inner(name)").execute()
         return res.data
-    except Exception:
-        return []
+    except Exception: return []
 
-# ==================== STUDENTS (ALL & UNASSIGNED) ====================
+# ==================== STUDENTS ====================
 @router.get("/students/")
 async def list_all_students(admin=Depends(require_admin)):
     res = supabase.table("students").select("id, student_number, display_name, class_id").execute()
@@ -339,78 +242,55 @@ async def list_unassigned_students(admin=Depends(require_admin)):
     unassigned = [s for s in all_students.data if s["id"] not in linked_ids]
     return unassigned
 
-# ==================== LINK STUDENT TO PARENT ====================
+@router.delete("/students/{student_id}/")
+async def delete_student(student_id: str, admin=Depends(require_admin)):
+    supabase.table("student_parents").delete().eq("student_id", student_id).execute()
+    supabase.table("submissions").delete().eq("student_id", student_id).execute()
+    supabase.table("student_responses").delete().eq("student_id", student_id).execute()
+    supabase.table("students").delete().eq("id", student_id).execute()
+    return {"message": "Deleted"}
+
+@router.put("/students/{student_id}/")
+async def update_student(student_id: str, display_name: str = None, student_number: str = None, class_id: str = None, admin=Depends(require_admin)):
+    data = {}
+    if display_name: data["display_name"] = display_name
+    if student_number: data["student_number"] = student_number
+    if class_id: data["class_id"] = class_id
+    if data: supabase.table("students").update(data).eq("id", student_id).execute()
+    return {"message": "Updated"}
+
+# ==================== LINK/UNLINK STUDENT TO PARENT ====================
 @router.post("/link-student-parent/")
-async def link_student_parent(
-    student_id: str,
-    parent_id: str,
-    admin: dict = Depends(require_admin)
-):
+async def link_student_parent(student_id: str, parent_id: str, admin: dict = Depends(require_admin)):
     try:
         logger.info(f"Linking student {student_id} to parent {parent_id}")
-        
-        # 1. Verify student exists
-        student = supabase.table("students") \
-            .select("id") \
-            .eq("id", student_id) \
-            .execute()
-        
-        if not student.data:
-            raise HTTPException(404, detail="Student not found")
-        
-        # 2. Verify parent profile exists and has parent role
-        profile = supabase.table("profiles") \
-            .select("id, role, full_name") \
-            .eq("id", parent_id) \
-            .eq("role", "parent") \
-            .execute()
-        
-        if not profile.data:
-            raise HTTPException(404, detail="Parent not found or user is not a parent")
-        
-        # 3. Get or create parent record in parents table
-        parent_rec = supabase.table("parents") \
-            .select("id") \
-            .eq("profile_id", parent_id) \
-            .execute()
-        
+        student = supabase.table("students").select("id").eq("id", student_id).execute()
+        if not student.data: raise HTTPException(404, detail="Student not found")
+        profile = supabase.table("profiles").select("id, role, full_name").eq("id", parent_id).eq("role", "parent").execute()
+        if not profile.data: raise HTTPException(404, detail="Parent not found or user is not a parent")
+        parent_rec = supabase.table("parents").select("id").eq("profile_id", parent_id).execute()
         if not parent_rec.data:
             new_parent = supabase.table("parents").insert({"profile_id": parent_id}).execute()
-            if new_parent.data:
-                parent_db_id = new_parent.data[0]["id"]
-            else:
-                raise HTTPException(500, detail="Failed to create parent record")
-        else:
-            parent_db_id = parent_rec.data[0]["id"]
-        
-        # 4. Check if already linked
-        existing_link = supabase.table("student_parents") \
-            .select("id") \
-            .eq("student_id", student_id) \
-            .eq("parent_id", parent_db_id) \
-            .execute()
-        
-        if existing_link.data:
-            raise HTTPException(400, detail="Student is already linked to this parent")
-        
-        # 5. Create the link
-        link_result = supabase.table("student_parents").insert({
-            "student_id": student_id,
-            "parent_id": parent_db_id
-        }).execute()
-        
-        if not link_result.data:
-            raise HTTPException(500, detail="Failed to create link")
-        
+            if new_parent.data: parent_db_id = new_parent.data[0]["id"]
+            else: raise HTTPException(500, detail="Failed to create parent record")
+        else: parent_db_id = parent_rec.data[0]["id"]
+        existing_link = supabase.table("student_parents").select("id").eq("student_id", student_id).eq("parent_id", parent_db_id).execute()
+        if existing_link.data: raise HTTPException(400, detail="Student is already linked to this parent")
+        link_result = supabase.table("student_parents").insert({"student_id": student_id, "parent_id": parent_db_id}).execute()
+        if not link_result.data: raise HTTPException(500, detail="Failed to create link")
         logger.info(f"Successfully linked student {student_id} to parent {parent_id}")
         return {"message": "Student linked to parent successfully"}
-    
-    except HTTPException:
-        raise
+    except HTTPException: raise
     except Exception as e:
         logger.error(f"Error linking student to parent: {str(e)}")
         raise HTTPException(500, detail=f"Internal server error: {str(e)}")
 
+@router.delete("/unlink-student-parent/")
+async def unlink_student_parent(student_id: str, parent_id: str, admin=Depends(require_admin)):
+    parent_rec = supabase.table("parents").select("id").eq("profile_id", parent_id).execute()
+    if parent_rec.data:
+        supabase.table("student_parents").delete().eq("student_id", student_id).eq("parent_id", parent_rec.data[0]["id"]).execute()
+    return {"message": "Unlinked"}
 
 # ==================== STATS ====================
 @router.get("/stats/")
@@ -429,84 +309,3 @@ async def stats(admin=Depends(require_admin)):
     except Exception as e:
         logger.error(f"Error fetching stats: {e}")
         return {"classes": 0, "students": 0, "teachers": 0, "materials": 0}
-    
-    # ==================== DELETE/UPDATE SUBJECTS ====================
-@router.delete("/subjects/{subject_id}/")
-async def delete_subject(subject_id: str, admin=Depends(require_admin)):
-    supabase.table("subjects").delete().eq("id", subject_id).execute()
-    return {"message": "Deleted"}
-
-@router.put("/subjects/{subject_id}/")
-async def update_subject(subject_id: str, name: str, admin=Depends(require_admin)):
-    supabase.table("subjects").update({"name": name}).eq("id", subject_id).execute()
-    return {"message": "Updated"}
-
-# ==================== DELETE/UPDATE TEACHERS ====================
-@router.delete("/teachers/{teacher_id}/")
-async def delete_teacher(teacher_id: str, admin=Depends(require_admin)):
-    # Remove assignments
-    supabase.table("class_teachers").delete().eq("teacher_id", teacher_id).execute()
-    # Delete profile
-    supabase.table("profiles").delete().eq("id", teacher_id).execute()
-    return {"message": "Deleted"}
-
-@router.put("/teachers/{teacher_id}/")
-async def update_teacher(teacher_id: str, full_name: str, admin=Depends(require_admin)):
-    supabase.table("profiles").update({"full_name": full_name}).eq("id", teacher_id).execute()
-    return {"message": "Updated"}
-
-# ==================== DELETE/UPDATE PARENTS ====================
-@router.delete("/parents/{parent_id}/")
-async def delete_parent(parent_id: str, admin=Depends(require_admin)):
-    # Remove student links
-    parent_rec = supabase.table("parents").select("id").eq("profile_id", parent_id).execute()
-    if parent_rec.data:
-        supabase.table("student_parents").delete().eq("parent_id", parent_rec.data[0]["id"]).execute()
-        supabase.table("parents").delete().eq("profile_id", parent_id).execute()
-    supabase.table("profiles").delete().eq("id", parent_id).execute()
-    return {"message": "Deleted"}
-
-@router.put("/parents/{parent_id}/")
-async def update_parent(parent_id: str, full_name: str, admin=Depends(require_admin)):
-    supabase.table("profiles").update({"full_name": full_name}).eq("id", parent_id).execute()
-    return {"message": "Updated"}
-
-# ==================== DELETE/UPDATE STUDENTS ====================
-@router.delete("/students/{student_id}/")
-async def delete_student(student_id: str, admin=Depends(require_admin)):
-    supabase.table("student_parents").delete().eq("student_id", student_id).execute()
-    supabase.table("submissions").delete().eq("student_id", student_id).execute()
-    supabase.table("student_responses").delete().eq("student_id", student_id).execute()
-    supabase.table("students").delete().eq("id", student_id).execute()
-    return {"message": "Deleted"}
-
-@router.put("/students/{student_id}/")
-async def update_student(student_id: str, display_name: str = None, student_number: str = None, class_id: str = None, admin=Depends(require_admin)):
-    data = {}
-    if display_name: data["display_name"] = display_name
-    if student_number: data["student_number"] = student_number
-    if class_id: data["class_id"] = class_id
-    if data: supabase.table("students").update(data).eq("id", student_id).execute()
-    return {"message": "Updated"}
-
-# ==================== UPDATE CLASS ====================
-@router.put("/classes/{class_id}/")
-async def update_class(class_id: str, name: str, grade: str = None, admin=Depends(require_admin)):
-    data = {"name": name}
-    if grade: data["grade"] = grade
-    supabase.table("classes").update(data).eq("id", class_id).execute()
-    return {"message": "Updated"}
-
-# ==================== UNASSIGN TEACHER ====================
-@router.delete("/assign/{assignment_id}/")
-async def unassign_teacher(assignment_id: str, admin=Depends(require_admin)):
-    supabase.table("class_teachers").delete().eq("id", assignment_id).execute()
-    return {"message": "Unassigned"}
-
-# ==================== UNLINK STUDENT FROM PARENT ====================
-@router.delete("/unlink-student-parent/")
-async def unlink_student_parent(student_id: str, parent_id: str, admin=Depends(require_admin)):
-    parent_rec = supabase.table("parents").select("id").eq("profile_id", parent_id).execute()
-    if parent_rec.data:
-        supabase.table("student_parents").delete().eq("student_id", student_id).eq("parent_id", parent_rec.data[0]["id"]).execute()
-    return {"message": "Unlinked"}
