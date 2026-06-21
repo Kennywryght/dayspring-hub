@@ -689,7 +689,7 @@ export default function TeacherDashboard() {
                     
                     {answer.questions?.question_type === 'multiple_choice' ? (
                       <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                        Student selected: <span className="font-semibold text-gray-800 dark:text-gray-200">{answer.selected_option_text || 'None'}</span>
+                        Student selected: <span className="font-semibold text-gray-800 dark:text-gray-200">{answer.selected_option_text || `Option ID: ${answer.selected_option_id}`}</span>
                       </p>
                     ) : (
                       <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 bg-gray-100 dark:bg-gray-600 p-3 rounded-lg">

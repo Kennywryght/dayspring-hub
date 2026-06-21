@@ -191,20 +191,28 @@ async def get_submission_answers(submission_id: str, user=Depends(get_current_us
     
     try:
         responses = supabase.table("student_responses") \
-            .select("*, questions(question_text, question_type)") \
+            .select("*, questions(question_text, question_type, id)") \
             .eq("student_id", submission_id) \
             .execute()
         
-        # For each response with a selected_option_id, fetch the option text
+        # For each response with a selected_option_id, fetch the option text and number
         for r in responses.data:
-            if r.get("selected_option_id"):
-                option = supabase.table("options") \
+            if r.get("selected_option_id") and r.get("questions"):
+                question_id = r["questions"]["id"]
+                # Get all options for this question to find the position
+                options = supabase.table("options") \
                     .select("id, option_text") \
-                    .eq("id", r["selected_option_id"]) \
-                    .single() \
+                    .eq("question_id", question_id) \
+                    .order("id") \
                     .execute()
-                if option.data:
-                    r["selected_option_text"] = option.data["option_text"]
+                
+                if options.data:
+                    # Find which position the selected option is in
+                    for idx, opt in enumerate(options.data):
+                        if opt["id"] == r["selected_option_id"]:
+                            r["selected_option_number"] = idx + 1  # 1-based numbering
+                            r["selected_option_text"] = opt["option_text"]
+                            break
         
         return {
             "submission_id": submission_id,
