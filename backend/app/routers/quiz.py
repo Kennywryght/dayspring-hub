@@ -195,6 +195,17 @@ async def get_submission_answers(submission_id: str, user=Depends(get_current_us
             .eq("student_id", submission_id) \
             .execute()
         
+        # For each response with a selected_option_id, fetch the option text
+        for r in responses.data:
+            if r.get("selected_option_id"):
+                option = supabase.table("options") \
+                    .select("id, option_text") \
+                    .eq("id", r["selected_option_id"]) \
+                    .single() \
+                    .execute()
+                if option.data:
+                    r["selected_option_text"] = option.data["option_text"]
+        
         return {
             "submission_id": submission_id,
             "answers": responses.data
@@ -202,8 +213,6 @@ async def get_submission_answers(submission_id: str, user=Depends(get_current_us
     except Exception as e:
         logger.error(f"Error fetching answers: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.put("/submissions/{submission_id}/grade")
 async def grade_submission(submission_id: str, payload: GradePayload, user=Depends(get_current_user)):
     """Teacher: Grade a student's quiz answers (also works for re-grading)"""
