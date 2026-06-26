@@ -30,7 +30,17 @@ async def create_class(name: str, grade: Optional[str] = None, admin=Depends(req
         return res.data[0]
     raise HTTPException(500, detail="Failed to create class")
 
-@router.delete("/classes/{class_id}/")\nasync def delete_class(class_id: str, admin=Depends(require_admin)):\n    # Delete class_teachers assignments first\n    supabase.table("class_teachers").delete().eq("class_id", class_id).execute()\n    # Unassign students (set class_id to null)\n    students = supabase.table("students").select("id").eq("class_id", class_id).execute()\n    for s in students.data:\n        supabase.table("students").update({"class_id": None}).eq("id", s["id"]).execute()\n    # Delete the class\n    supabase.table("classes").delete().eq("id", class_id).execute()\n    return {"message": "Deleted"}
+@router.delete("/classes/{class_id}/")
+async def delete_class(class_id: str, admin=Depends(require_admin)):
+    # Delete class_teachers assignments first
+    supabase.table("class_teachers").delete().eq("class_id", class_id).execute()
+    # Unassign students (set class_id to null)
+    students = supabase.table("students").select("id").eq("class_id", class_id).execute()
+    for s in students.data:
+        supabase.table("students").update({"class_id": None}).eq("id", s["id"]).execute()
+    # Delete the class
+    supabase.table("classes").delete().eq("id", class_id).execute()
+    return {"message": "Deleted"}
 
 @router.put("/classes/{class_id}/")
 async def update_class(class_id: str, name: str, grade: str = None, admin=Depends(require_admin)):
@@ -103,7 +113,11 @@ async def create_teacher(email: str, password: str, full_name: str, admin=Depend
 
 @router.delete("/teachers/{teacher_id}/")
 async def delete_teacher(teacher_id: str, admin=Depends(require_admin)):
+    # Remove class_teachers assignments
     supabase.table("class_teachers").delete().eq("teacher_id", teacher_id).execute()
+    # Update classes that reference this teacher
+    supabase.table("classes").update({"teacher_id": None}).eq("teacher_id", teacher_id).execute()
+    # Delete profile
     supabase.table("profiles").delete().eq("id", teacher_id).execute()
     return {"message": "Deleted"}
 
