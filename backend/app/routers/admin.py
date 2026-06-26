@@ -30,10 +30,7 @@ async def create_class(name: str, grade: Optional[str] = None, admin=Depends(req
         return res.data[0]
     raise HTTPException(500, detail="Failed to create class")
 
-@router.delete("/classes/{class_id}/")
-async def delete_class(class_id: str, admin=Depends(require_admin)):
-    supabase.table("classes").delete().eq("id", class_id).execute()
-    return {"message": "Deleted"}
+@router.delete("/classes/{class_id}/")\nasync def delete_class(class_id: str, admin=Depends(require_admin)):\n    # Delete class_teachers assignments first\n    supabase.table("class_teachers").delete().eq("class_id", class_id).execute()\n    # Unassign students (set class_id to null)\n    students = supabase.table("students").select("id").eq("class_id", class_id).execute()\n    for s in students.data:\n        supabase.table("students").update({"class_id": None}).eq("id", s["id"]).execute()\n    # Delete the class\n    supabase.table("classes").delete().eq("id", class_id).execute()\n    return {"message": "Deleted"}
 
 @router.put("/classes/{class_id}/")
 async def update_class(class_id: str, name: str, grade: str = None, admin=Depends(require_admin)):
