@@ -148,140 +148,50 @@ export default function AdminDashboard() {
   // ===== EDIT/DELETE FUNCTIONS =====
   const updateClass = async () => {
     if (!editingClass || !editClassName.trim()) return;
-    const res = await fetch(`${API_URL}admin/classes/${editingClass}/`, {
-      method: 'PUT',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: editClassName, grade: editClassGrade }),
-    });
-    if (res.ok) {
-      showMsg('Class updated');
-      setEditingClass(null);
-      fetchAll();
-      fetchClassDetails();
-    } else showMsg('Failed to update class', 'error');
+    const params = new URLSearchParams({ name: editClassName.trim() });
+    if (editClassGrade.trim()) params.append('grade', editClassGrade.trim());
+    const res = await fetch(`${API_URL}admin/classes/${editingClass}/?${params.toString()}`, { method: 'PUT', headers });
+    if (res.ok) { showMsg('Class updated'); setEditingClass(null); fetchAll(); fetchClassDetails(); }
+    else { const err = await res.json().catch(() => ({})); showMsg(err.detail || 'Failed', 'error'); }
   };
 
-  const deleteSubject = async (id) => {
-    if (!confirm('Delete this subject?')) return;
-    const res = await fetch(`${API_URL}admin/subjects/${id}/`, { method: 'DELETE', headers });
-    if (res.ok) {
-      showMsg('Subject deleted');
-      fetchAll();
-    } else showMsg('Failed to delete subject', 'error');
-  };
+  const deleteSubject = async (id) => { if (!confirm('Delete this subject?')) return; const r = await fetch(`${API_URL}admin/subjects/${id}/`, { method: 'DELETE', headers }); if (r.ok) { showMsg('Subject deleted'); fetchAll(); } else showMsg('Failed', 'error'); };
 
   const updateSubject = async () => {
     if (!editingSubject || !editSubjectName.trim()) return;
-    const res = await fetch(`${API_URL}admin/subjects/${editingSubject}/`, {
-      method: 'PUT',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: editSubjectName }),
-    });
-    if (res.ok) {
-      showMsg('Subject updated');
-      setEditingSubject(null);
-      fetchAll();
-    } else showMsg('Failed to update subject', 'error');
+    const r = await fetch(`${API_URL}admin/subjects/${editingSubject}/?name=${encodeURIComponent(editSubjectName.trim())}`, { method: 'PUT', headers });
+    if (r.ok) { showMsg('Subject updated'); setEditingSubject(null); fetchAll(); } else showMsg('Failed', 'error');
   };
 
-  const deleteTeacher = async (id) => {
-    if (!confirm('Delete this teacher? All assignments will be removed.')) return;
-    const res = await fetch(`${API_URL}admin/teachers/${id}/`, { method: 'DELETE', headers });
-    if (res.ok) {
-      showMsg('Teacher deleted');
-      fetchAll();
-      fetchTeacherDetails();
-    } else showMsg('Failed to delete teacher', 'error');
-  };
+  const deleteTeacher = async (id) => { if (!confirm('Delete this teacher?')) return; const r = await fetch(`${API_URL}admin/teachers/${id}/`, { method: 'DELETE', headers }); if (r.ok) { showMsg('Teacher deleted'); fetchAll(); fetchTeacherDetails(); } else showMsg('Failed', 'error'); };
 
   const updateTeacher = async () => {
     if (!editingTeacher || !editTeacherName.trim()) return;
-    const res = await fetch(`${API_URL}admin/teachers/${editingTeacher}/`, {
-      method: 'PUT',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ full_name: editTeacherName }),
-    });
-    if (res.ok) {
-      showMsg('Teacher updated');
-      setEditingTeacher(null);
-      fetchAll();
-      fetchTeacherDetails();
-    } else showMsg('Failed to update teacher', 'error');
+    const r = await fetch(`${API_URL}admin/teachers/${editingTeacher}/?full_name=${encodeURIComponent(editTeacherName.trim())}`, { method: 'PUT', headers });
+    if (r.ok) { showMsg('Teacher updated'); setEditingTeacher(null); fetchAll(); fetchTeacherDetails(); } else showMsg('Failed', 'error');
   };
 
-  const deleteParent = async (id) => {
-    if (!confirm('Delete this parent? Student links will be removed.')) return;
-    const res = await fetch(`${API_URL}admin/parents/${id}/`, { method: 'DELETE', headers });
-    if (res.ok) {
-      showMsg('Parent deleted');
-      fetchAll();
-      fetchParentDetails();
-    } else showMsg('Failed to delete parent', 'error');
-  };
+  const deleteParent = async (id) => { if (!confirm('Delete this parent?')) return; const r = await fetch(`${API_URL}admin/parents/${id}/`, { method: 'DELETE', headers }); if (r.ok) { showMsg('Parent deleted'); fetchAll(); fetchParentDetails(); } else showMsg('Failed', 'error'); };
 
   const updateParent = async () => {
     if (!editingParent || !editParentName.trim()) return;
-    const res = await fetch(`${API_URL}admin/parents/${editingParent}/`, {
-      method: 'PUT',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ full_name: editParentName }),
-    });
-    if (res.ok) {
-      showMsg('Parent updated');
-      setEditingParent(null);
-      fetchAll();
-      fetchParentDetails();
-    } else showMsg('Failed to update parent', 'error');
+    const r = await fetch(`${API_URL}admin/parents/${editingParent}/?full_name=${encodeURIComponent(editParentName.trim())}`, { method: 'PUT', headers });
+    if (r.ok) { showMsg('Parent updated'); setEditingParent(null); fetchAll(); fetchParentDetails(); } else showMsg('Failed', 'error');
   };
 
-  const deleteStudent = async (id) => {
-    if (!confirm('Delete this student? All submissions will be removed.')) return;
-    const res = await fetch(`${API_URL}admin/students/${id}/`, { method: 'DELETE', headers });
-    if (res.ok) {
-      showMsg('Student deleted');
-      fetchAll();
-    } else showMsg('Failed to delete student', 'error');
-  };
+  const deleteStudent = async (id) => { if (!confirm('Delete this student?')) return; const r = await fetch(`${API_URL}admin/students/${id}/`, { method: 'DELETE', headers }); if (r.ok) { showMsg('Student deleted'); fetchAll(); } else showMsg('Failed', 'error'); };
 
   const updateStudent = async () => {
     if (!editingStudent || !editStudentName.trim()) return;
-    const body = { display_name: editStudentName, student_number: editStudentNumber };
-    if (editStudentClassId) body.class_id = editStudentClassId;
-    const res = await fetch(`${API_URL}admin/students/${editingStudent}/`, {
-      method: 'PUT',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (res.ok) {
-      showMsg('Student updated');
-      setEditingStudent(null);
-      fetchAll();
-    } else showMsg('Failed to update student', 'error');
+    const params = new URLSearchParams({ display_name: editStudentName.trim(), student_number: editStudentNumber.trim() });
+    if (editStudentClassId) params.append('class_id', editStudentClassId);
+    const r = await fetch(`${API_URL}admin/students/${editingStudent}/?${params.toString()}`, { method: 'PUT', headers });
+    if (r.ok) { showMsg('Student updated'); setEditingStudent(null); fetchAll(); } else { const e = await r.json().catch(() => ({})); showMsg(e.detail || 'Failed', 'error'); }
   };
 
-  const unassignTeacher = async (assignmentId) => {
-    if (!confirm('Remove this teacher assignment?')) return;
-    const res = await fetch(`${API_URL}admin/assign/${assignmentId}/`, { method: 'DELETE', headers });
-    if (res.ok) {
-      showMsg('Teacher unassigned');
-      fetchAll();
-      fetchClassDetails();
-      fetchTeacherDetails();
-    } else showMsg('Failed to unassign', 'error');
-  };
+  const unassignTeacher = async (id) => { if (!confirm('Remove assignment?')) return; const r = await fetch(`${API_URL}admin/assign/${id}/`, { method: 'DELETE', headers }); if (r.ok) { showMsg('Unassigned'); fetchAll(); fetchClassDetails(); fetchTeacherDetails(); } else showMsg('Failed', 'error'); };
 
-  const unlinkParent = async (studentId, parentId) => {
-    if (!confirm('Remove this parent-student link?')) return;
-    const res = await fetch(
-      `${API_URL}admin/unlink-student-parent/?student_id=${studentId}&parent_id=${parentId}`,
-      { method: 'DELETE', headers }
-    );
-    if (res.ok) {
-      showMsg('Link removed');
-      fetchUnassignedStudents();
-      fetchParentDetails();
-    } else showMsg('Failed to unlink', 'error');
-  };
+  const unlinkParent = async (sid, pid) => { if (!confirm('Remove link?')) return; const r = await fetch(`${API_URL}admin/unlink-student-parent/?student_id=${sid}&parent_id=${pid}`, { method: 'DELETE', headers }); if (r.ok) { showMsg('Link removed'); fetchUnassignedStudents(); fetchParentDetails(); } else showMsg('Failed', 'error'); };
 
   // Computed stats for pending work
   const unlinkedStudents = unassignedStudents.length;
@@ -1205,7 +1115,10 @@ export default function AdminDashboard() {
                           {isLinked ? (
                             <span className="text-green-600 dark:text-green-400 text-xs font-semibold">✅ Linked</span>
                           ) : (
-                            <span className="text-amber-600 dark:text-amber-400 text-xs font-semibold">❌ Not linked</span>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-amber-600 dark:text-amber-400 text-xs font-semibold">❌ Not linked</span>
+                              <button onClick={() => { setLinkStudentId(s.id); setTab('link'); }} className="text-indigo-500 hover:text-indigo-700 text-xs font-medium">Link →</button>
+                            </div>
                           )}
                         </td>
                         <td className="px-6 py-4">
@@ -1359,7 +1272,10 @@ export default function AdminDashboard() {
                     <div className="border-t border-gray-200 dark:border-gray-700 p-6 bg-gray-50 dark:bg-gray-900/50">
                       <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-3">Assigned Classes & Subjects</h4>
                       {teacherClasses.length === 0 ? (
-                        <p className="text-sm text-gray-500 dark:text-gray-400">No classes assigned yet.</p>
+                        <div>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">No classes assigned yet.</p>
+                          <button onClick={() => { setAssignTeacherId(t.id); setTab('assign'); }} className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-indigo-200 transition">Assign to Class →</button>
+                        </div>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           {teacherClasses.map((tc, idx) => (
@@ -1510,7 +1426,10 @@ export default function AdminDashboard() {
                     <div className="border-t border-gray-200 dark:border-gray-700 p-6 bg-gray-50 dark:bg-gray-900/50">
                       <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-3">Linked Students</h4>
                       {linkedStudents.length === 0 ? (
-                        <p className="text-sm text-gray-500 dark:text-gray-400">No students linked to this parent.</p>
+                        <div>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">No students linked.</p>
+                          <button onClick={() => { setLinkParentId(p.id); setTab('link'); }} className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-indigo-200 transition">Link to Student →</button>
+                        </div>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           {linkedStudents.map((s) => (
