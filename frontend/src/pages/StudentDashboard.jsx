@@ -21,6 +21,7 @@ import {
   Zap,
   Download,
   Eye,
+  Loader2,
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://dayspring-hub.onrender.com/api/v1/';
@@ -49,6 +50,7 @@ export default function StudentDashboard() {
   const [activeQuiz, setActiveQuiz] = useState(null);
   const [quizQuestions, setQuizQuestions] = useState([]);
   const [responses, setResponses] = useState({});
+  const [loadingQuiz, setLoadingQuiz] = useState(false);
 
   // Quiz results state
   const [myQuizResults, setMyQuizResults] = useState({});
@@ -134,20 +136,54 @@ export default function StudentDashboard() {
   };
 
   const startQuiz = async (quizId) => {
+    setLoadingQuiz(true);
     try {
+      console.log('Starting quiz with ID:', quizId);
+      
       const res = await fetch(`${API_URL}quizzes/${quizId}/take`, {
-        headers: { Authorization: `Bearer ${user.access_token}` },
+        headers: { 
+          Authorization: `Bearer ${user.access_token}`,
+          'Content-Type': 'application/json',
+        },
       });
+      
+      console.log('Quiz response status:', res.status);
+      
       if (res.ok) {
         const data = await res.json();
-        setActiveQuiz(data.quiz);
-        setQuizQuestions(data.questions);
+        console.log('Quiz data received:', data);
+        
+        // Handle different response structures
+        let quizData = data;
+        let questionsData = data.questions || [];
+        
+        // If the response has a nested structure
+        if (data.quiz) {
+          quizData = data.quiz;
+          questionsData = data.questions || [];
+        }
+        
+        // Ensure we have questions
+        if (!questionsData || questionsData.length === 0) {
+          showMsg('This quiz has no questions.', 'error');
+          setLoadingQuiz(false);
+          return;
+        }
+        
+        setActiveQuiz(quizData);
+        setQuizQuestions(questionsData);
         setResponses({});
+        showMsg('Quiz loaded successfully!', 'success');
       } else {
-        showMsg('Failed to load quiz', 'error');
+        const errorData = await res.json().catch(() => ({}));
+        console.error('Failed to load quiz:', errorData);
+        showMsg(errorData.detail || 'Failed to load quiz. Please try again.', 'error');
       }
     } catch (err) {
-      showMsg('Failed to load quiz', 'error');
+      console.error('Error starting quiz:', err);
+      showMsg('Network error. Please check your connection.', 'error');
+    } finally {
+      setLoadingQuiz(false);
     }
   };
 
@@ -159,6 +195,21 @@ export default function StudentDashboard() {
   };
 
   const submitQuiz = async () => {
+    // Check if all questions are answered
+    const unansweredQuestions = quizQuestions.filter(q => {
+      const response = responses[q.id];
+      if (q.question_type === 'multiple_choice') {
+        return !response?.selected_option_id;
+      } else {
+        return !response?.text_answer || response.text_answer.trim() === '';
+      }
+    });
+
+    if (unansweredQuestions.length > 0) {
+      showMsg(`Please answer all questions before submitting. (${unansweredQuestions.length} unanswered)`, 'error');
+      return;
+    }
+
     const answers = quizQuestions.map(q => ({
       question_id: q.id,
       selected_option_id: responses[q.id]?.selected_option_id || null,
@@ -178,6 +229,8 @@ export default function StudentDashboard() {
       if (res.ok) {
         showMsg('Quiz submitted successfully!');
         setActiveQuiz(null);
+        setQuizQuestions([]);
+        setResponses({});
         fetchData();
       } else {
         const err = await res.json().catch(() => ({}));
@@ -593,8 +646,14 @@ export default function StudentDashboard() {
                             </button>
                           </>
                         ) : (
-                          <button onClick={() => startQuiz(quiz.id)}
-                            className="bg-brass-600 hover:bg-brass-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-colors">Take Quiz</button>
+                          <button 
+                            onClick={() => startQuiz(quiz.id)}
+                            disabled={loadingQuiz}
+                            className="bg-brass-600 hover:bg-brass-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          >
+                            {loadingQuiz ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                            {loadingQuiz ? 'Loading...' : 'Take Quiz'}
+                          </button>
                         )}
                       </div>
                     </div>
@@ -856,9 +915,13 @@ export default function StudentDashboard() {
                             )}
                           </div>
                         ) : (
-                          <button onClick={() => startQuiz(quiz.id)}
-                            className="w-full bg-brass-600 hover:bg-brass-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow-soft transition-colors duration-150">
-                            Start Quiz
+                          <button 
+                            onClick={() => startQuiz(quiz.id)}
+                            disabled={loadingQuiz}
+                            className="w-full bg-brass-600 hover:bg-brass-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow-soft transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          >
+                            {loadingQuiz ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                            {loadingQuiz ? 'Loading...' : 'Start Quiz'}
                           </button>
                         )}
                       </div>
@@ -871,7 +934,7 @@ export default function StudentDashboard() {
             <div className="bg-white dark:bg-navy-800 rounded-3xl shadow-card border border-ink-200 dark:border-navy-600 p-6 md:p-8">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-display font-semibold text-navy-800 dark:text-white">{activeQuiz.title}</h2>
-                <button onClick={() => setActiveQuiz(null)} className="text-ink-500 dark:text-ink-300 hover:text-navy-700 dark:hover:text-white text-sm font-medium">Cancel</button>
+                <button onClick={() => { setActiveQuiz(null); setQuizQuestions([]); setResponses({}); }} className="text-ink-500 dark:text-ink-300 hover:text-navy-700 dark:hover:text-white text-sm font-medium">Cancel</button>
               </div>
               {activeQuiz.description && <p className="text-ink-600 dark:text-ink-300 mb-8">{activeQuiz.description}</p>}
               <div className="space-y-8">
@@ -880,7 +943,7 @@ export default function StudentDashboard() {
                     <p className="font-semibold text-lg text-navy-800 dark:text-ink-100 mb-3">{idx + 1}. {q.question_text}</p>
                     {q.question_type === 'multiple_choice' ? (
                       <div className="space-y-2">
-                        {q.options.map(opt => (
+                        {q.options && q.options.map(opt => (
                           <label key={opt.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-ink-50 dark:hover:bg-navy-700/50 cursor-pointer transition-colors">
                             <input type="radio" name={`question-${q.id}`} value={opt.id}
                               checked={responses[q.id]?.selected_option_id === opt.id}
