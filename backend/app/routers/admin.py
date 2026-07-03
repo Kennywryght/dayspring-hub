@@ -320,3 +320,43 @@ async def stats(admin=Depends(require_admin)):
     except Exception as e:
         logger.error(f"Error fetching stats: {e}")
         return {"classes": 0, "students": 0, "teachers": 0, "materials": 0}
+    
+    
+# ==================== SOFT DELETE & RESTORE ====================
+@router.put("/soft-delete/")
+async def soft_delete_entity(type: str, id: str, admin=Depends(require_admin)):
+    """Mark an entity as deleted (soft delete)"""
+    table_map = {"class": "classes", "subject": "subjects", "teacher": "profiles", "parent": "profiles", "student": "students"}
+    table = table_map.get(type)
+    if not table: raise HTTPException(400, detail="Invalid type")
+    supabase.table(table).update({"deleted": True, "deleted_at": "now()"}).eq("id", id).execute()
+    return {"message": f"{type} marked as deleted"}
+
+@router.put("/restore/")
+async def restore_entity(type: str, id: str, admin=Depends(require_admin)):
+    """Restore a soft-deleted entity"""
+    table_map = {"class": "classes", "subject": "subjects", "teacher": "profiles", "parent": "profiles", "student": "students"}
+    table = table_map.get(type)
+    if not table: raise HTTPException(400, detail="Invalid type")
+    supabase.table(table).update({"deleted": False, "deleted_at": None}).eq("id", id).execute()
+    return {"message": f"{type} restored"}
+
+@router.get("/deleted/")
+async def list_deleted(admin=Depends(require_admin)):
+    """Get all soft-deleted entities"""
+    deleted = []
+    for table in ["classes", "subjects", "students"]:
+        res = supabase.table(table).select("id, name, deleted_at").eq("deleted", True).execute()
+        for r in res.data: deleted.append({**r, "type": table[:-1]})
+    for table in ["profiles"]:
+        res = supabase.table(table).select("id, full_name, role, deleted_at").eq("deleted", True).execute()
+        for r in res.data: deleted.append({"id": r["id"], "name": r.get("full_name", ""), "type": r.get("role", "unknown"), "deleted_at": r.get("deleted_at")})
+    return deleted
+
+@router.post("/create-student/")
+async def create_student(student_number: str, password: str, display_name: str, class_id: str = None, admin=Depends(require_admin)):
+    data = {"student_number": student_number, "password": password, "display_name": display_name}
+    if class_id: data["class_id"] = class_id
+    res = supabase.table("students").insert(data).execute()
+    if res.data: return res.data[0]
+    raise HTTPException(500, detail="Failed")

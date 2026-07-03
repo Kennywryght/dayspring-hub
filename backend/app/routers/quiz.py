@@ -5,6 +5,7 @@ from app.database import supabase
 from app.utils.auth import get_current_user
 from typing import Optional, List
 from pydantic import BaseModel
+from fastapi.responses import Response
 import logging
 
 logger = logging.getLogger(__name__)
@@ -627,3 +628,137 @@ async def delete_quiz(quiz_id: int, user=Depends(get_current_user)):
         .execute()
 
     return {"detail": "Quiz deleted successfully"}
+
+@router.post("/{quiz_id}/auto-grade")
+async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Only teachers can auto-grade")
+    
+    questions = supabase.table("questions").select("id, question_type, points").eq("quiz_id", quiz_id).execute()
+    
+    for q in questions.data:
+        if q["question_type"] == "multiple_choice":
+            correct = supabase.table("options").select("id").eq("question_id", q["id"]).eq("is_correct", True).single().execute()
+            if correct.data:
+                pts = float(q.get("points") or 5)
+                responses = supabase.table("student_responses").select("id, selected_option_id").eq("question_id", q["id"]).execute()
+                for r in responses.data:
+                    is_correct = r["selected_option_id"] == correct.data["id"]
+                    supabase.table("student_responses").update({
+                        "points": pts if is_correct else 0,
+                        "is_correct": is_correct
+                    }).eq("id", r["id"]).execute()
+    
+    # Mark quiz as auto-graded
+    supabase.table("quizzes").update({"auto_graded": True}).eq("id", quiz_id).execute()
+    
+    return {"message": "Quiz auto-graded successfully"}
+@router.get("/{quiz_id}/my-result")
+async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
+    """Student: Get my result for a specific quiz with correct answers"""
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can view results")
+    
+    try:
+        student_db_id = await get_student_db_id(user)
+        
+        # Get quiz info
+        quiz = supabase.table("quizzes").select("id, title, auto_graded").eq("id", quiz_id).single().execute()
+        if not quiz.data:
+            raise HTTPException(status_code=404, detail="Quiz not found")
+        
+        questions = supabase.table("questions").select("id, question_text, question_type, points, order").eq("quiz_id", quiz_id).order("order").execute()
+        total_questions = len(questions.data)
+        
+        # Get student responses
+        responses = supabase.table("student_responses").select("*, questions!inner(quiz_id, question_text, question_type, order, points)").eq("student_id", student_db_id).eq("questions.quiz_id", quiz_id).execute()
+        
+        if not responses.data:
+            return {"quiz_title": quiz.data["title"], "submitted": False, "total_points": 0, "total_possible": total_questions * 5, "graded_count": 0, "total_questions": total_questions, "auto_graded": quiz.data.get("auto_graded", False), "answers": []}
+        
+        sorted_responses = sorted(responses.data, key=lambda r: r.get("questions", {}).get("order", 0))
+        
+        total_points = 0
+        graded_count = 0
+        answers = []
+        
+        for r in sorted_responses:
+            q_data = r.get("questions", {})
+            answer_data = {
+                "question_id": r["question_id"],
+                "question_text": q_data.get("question_text", ""),
+                "question_type": q_data.get("question_type", ""),
+                "points": r.get("points"),
+                "feedback": r.get("feedback"),
+                "text_answer": r.get("text_answer"),
+                "selected_option_id": r.get("selected_option_id"),
+                "is_correct": r.get("is_correct"),
+            }
+            
+            # If multiple choice, get option text and correct answer
+            if r.get("selected_option_id"):
+                option = supabase.table("options").select("option_text").eq("id", r["selected_option_id"]).single().execute()
+                if option.data:
+                    answer_data["selected_option_text"] = option.data["option_text"]
+                
+                # Get correct answer for this question
+                if q_data.get("question_type") == "multiple_choice":
+                    correct_opt = supabase.table("options").select("option_text").eq("question_id", r["question_id"]).eq("is_correct", True).single().execute()
+                    if correct_opt.data:
+                        answer_data["correct_answer"] = correct_opt.data["option_text"]
+            
+            answers.append(answer_data)
+            if r.get("points") is not None:
+                total_points += float(r["points"])
+                graded_count += 1
+        
+        return {
+            "quiz_title": quiz.data["title"],
+            "submitted": True,
+            "total_points": total_points,
+            "total_possible": total_questions * 5,
+            "graded_count": graded_count,
+            "total_questions": total_questions,
+            "auto_graded": quiz.data.get("auto_graded", False),
+            "answers": answers,
+        }
+    except Exception as e:
+        logger.error(f"Error fetching student result: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.get("/{quiz_id}/export-result")
+async def export_quiz_result(quiz_id: int, user=Depends(get_current_user)):
+    """Export student's quiz result as PDF"""
+    if user["role"] != "student":
+        raise HTTPException(status_code=403, detail="Only students can export results")
+    
+    # Get the result using the existing function
+    result = await get_my_quiz_result(quiz_id, user)
+    
+    # Generate a simple text/HTML report
+    html = f"""
+    <html><head><title>Quiz Results - {result['quiz_title']}</title>
+    <style>body{{font-family:Arial;padding:20px}}h1{{color:#1a365d}}.correct{{color:#166534}}.incorrect{{color:#991b1b}}.score{{font-size:24px;font-weight:bold}}</style>
+    </head><body>
+    <h1>{result['quiz_title']}</h1>
+    <p class="score">Score: {result['total_points']}/{result['total_possible']} ({round((result['total_points']/result['total_possible'])*100) if result['total_possible']>0 else 0}%)</p>
+    <p>Graded: {result['graded_count']}/{result['total_questions']} questions</p>
+    <hr>
+    """
+    
+    for i, ans in enumerate(result.get("answers", [])):
+        status = "✓ Correct" if ans.get("is_correct") else ("✗ Incorrect" if ans.get("is_correct") is False else "Not graded")
+        color = "correct" if ans.get("is_correct") else ("incorrect" if ans.get("is_correct") is False else "")
+        html += f"""
+        <div class="{color}">
+            <p><strong>Q{i+1}: {ans['question_text']}</strong></p>
+            <p>Your answer: {ans.get('selected_option_text') or ans.get('text_answer') or 'No answer'}</p>
+            {f"<p>Correct answer: {ans.get('correct_answer')}</p>" if ans.get('correct_answer') else ""}
+            <p>Points: {ans.get('points', 'N/A')} | Status: {status}</p>
+            {f"<p>Feedback: {ans['feedback']}</p>" if ans.get('feedback') else ""}
+        </div><hr>
+        """
+    
+    html += "</body></html>"
+    
+    return Response(content=html, media_type="text/html", headers={"Content-Disposition": f"attachment; filename=quiz_{quiz_id}_result.html"})

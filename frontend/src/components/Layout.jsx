@@ -3,6 +3,29 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNotifications } from '../context/NotificationContext';
 import { useNavigate } from 'react-router-dom';
+import {
+  Home,
+  BookOpen,
+  ClipboardList,
+  Megaphone,
+  GraduationCap,
+  PenSquare,
+  School,
+  BookMarked,
+  Users,
+  UserRound,
+  Link2,
+  BarChart3,
+  Bell,
+  Sun,
+  Moon,
+  LogOut,
+  Menu,
+  X,
+  ChevronRight,
+  Circle,
+  Trash2,
+} from 'lucide-react';
 
 export default function Layout({ children, navLinks }) {
   const { user, logout } = useAuth();
@@ -13,92 +36,83 @@ export default function Layout({ children, navLinks }) {
 
   const closeSidebar = () => setSidebarOpen(false);
 
-  // Calculate total unread notifications
   const totalNotifications = Object.values(counts).reduce((sum, c) => sum + (c || 0), 0);
 
-  // Default icons for common nav labels
-  const getDefaultIcon = (label) => {
+  const getIcon = (label) => {
     const icons = {
-      'Home': '🏠',
-      'Materials': '📚',
-      'Assignments': '📝',
-      'Announcements': '📢',
-      'Students': '👩‍🎓',
-      'Quizzes': '🧠',
-      'Classes': '🏫',
-      'Subjects': '📖',
-      'Teachers': '👩‍🏫',
-      'Parents': '👨‍👩‍👧',
-      'Assign': '🔗',
-      'Link Parent': '👨‍👩‍👧',
-      'Stats': '📈',
+      'Home': Home,
+      'Materials': BookOpen,
+      'Assignments': ClipboardList,
+      'Announcements': Megaphone,
+      'Students': GraduationCap,
+      'Quizzes': PenSquare,
+      'Classes': School,
+      'Subjects': BookMarked,
+      'Teachers': Users,
+      'Parents': UserRound,
+      'Assign': Link2,
+      'Link Parent': Link2,
+      'Stats': BarChart3,
+      'Trash': Trash2,
     };
-    return icons[label] || null;
+    return icons[label] || Circle;
   };
 
-  // Get role badge color
   const getRoleBadge = (role) => {
     const badges = {
-      'teacher': 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
-      'student': 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
-      'parent': 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300',
-      'super_admin': 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+      'teacher': 'bg-brass-100 dark:bg-brass-900/30 text-brass-700 dark:text-brass-300',
+      'student': 'bg-forest-50 dark:bg-forest-700/20 text-forest-700 dark:text-forest-500',
+      'parent': 'bg-navy-100 dark:bg-navy-500/20 text-navy-600 dark:text-navy-200',
+      'super_admin': 'bg-oxbrick-50 dark:bg-oxbrick-700/20 text-oxbrick-600 dark:text-oxbrick-500',
     };
-    return badges[role] || 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
+    return badges[role] || 'bg-ink-100 dark:bg-ink-700 text-ink-600 dark:text-ink-300';
   };
 
   return (
-    <div className="min-h-screen flex bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
-      {/* Overlay (mobile) */}
+    <div className="h-screen flex bg-parchment dark:bg-navy-900 transition-colors duration-300 overflow-hidden">
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm lg:hidden transition-opacity duration-300"
+          className="fixed inset-0 z-30 bg-navy-900/50 backdrop-blur-sm lg:hidden transition-opacity duration-300"
           onClick={closeSidebar}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — fixed Oxford Navy identity */}
       <aside
-        className={`fixed top-0 left-0 z-40 h-full w-72 bg-white dark:bg-gray-800 shadow-2xl border-r border-gray-200/60 dark:border-gray-700/50 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-auto flex flex-col ${
+        className={`fixed top-0 left-0 z-40 h-full w-72 bg-navy-800 shadow-elevated transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-auto flex flex-col ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        {/* Brand Section - Fixed at top */}
-        <div className="flex-shrink-0 p-5 border-b border-gray-100 dark:border-gray-700/50">
-          <div className="flex items-center justify-between">
+        {/* Brand + horizon line */}
+        <div className="flex-shrink-0">
+          <div className="flex items-center justify-between p-5">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl overflow-hidden border-2 border-blue-200 dark:border-blue-500/30 shadow-md flex-shrink-0 bg-white">
-                <img
-                  src="/logo.jpg"
-                  alt="Dayspring Hub Logo"
-                  className="w-full h-full object-cover"
-                />
+              <div className="w-10 h-10 rounded overflow-hidden border border-brass-500/40 flex-shrink-0 bg-white">
+                <img src="/logo.jpg" alt="Dayspring Hub" className="w-full h-full object-cover" />
               </div>
-              <div>
-                <span className="text-xl font-black text-gray-900 dark:text-white tracking-tight">
-                  Dayspring
-                </span>
-                <span className="text-xl font-black text-blue-600 dark:text-blue-400"> Hub</span>
+              <div className="leading-tight">
+                <p className="text-lg font-display font-semibold text-white tracking-tight">Dayspring</p>
+                <p className="text-xs font-sans text-brass-300 uppercase tracking-widest">Hub</p>
               </div>
             </div>
             <button
               onClick={closeSidebar}
-              className="lg:hidden text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-2xl leading-none transition-colors p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="lg:hidden text-navy-300 hover:text-white p-1 rounded transition-colors"
             >
-              &times;
+              <X className="w-5 h-5" />
             </button>
           </div>
+          <div className="h-px bg-gradient-to-r from-transparent via-brass-500 to-transparent opacity-70" />
         </div>
 
-        {/* Navigation Section - Scrollable */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
-          <p className="px-4 py-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5 scrollbar-thin">
+          <p className="px-4 py-2 text-xs font-semibold text-navy-400 uppercase tracking-wider">
             Navigation
           </p>
-          
-          {navLinks.map((link, index) => {
-            const defaultIcon = getDefaultIcon(link.label);
-            
+
+          {navLinks.map((link) => {
+            const Icon = getIcon(link.label);
             return (
               <button
                 key={link.label}
@@ -106,97 +120,69 @@ export default function Layout({ children, navLinks }) {
                   link.onClick?.();
                   closeSidebar();
                 }}
-                className="w-full text-left px-4 py-2.5 rounded-xl flex items-center gap-3 text-gray-600 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700/60 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200 font-medium group relative overflow-hidden"
+                className="w-full text-left px-4 py-2.5 rounded flex items-center gap-3 text-navy-200 hover:bg-navy-700 hover:text-white transition-colors duration-150 font-medium text-sm group relative"
               >
-                {/* Hover background effect */}
-                <span className="absolute inset-0 bg-gradient-to-r from-blue-500/0 to-indigo-500/0 group-hover:from-blue-500/5 group-hover:to-indigo-500/5 dark:group-hover:from-blue-400/5 dark:group-hover:to-indigo-400/5 transition-all duration-300 rounded-xl" />
-                
-                {/* Active indicator (left bar) */}
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-0 bg-blue-500 dark:bg-blue-400 rounded-r-full group-hover:h-8 transition-all duration-300" />
-                
-                {/* Icon */}
-                <span className="relative z-10 text-lg group-hover:scale-110 transition-transform duration-200 flex-shrink-0">
-                  {link.icon ? link.icon : defaultIcon ? defaultIcon : (
-                    <span className="w-4 h-4 flex items-center justify-center text-gray-400 dark:text-gray-500 group-hover:text-blue-500 dark:group-hover:text-blue-400">
-                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 8 8">
-                        <circle cx="4" cy="4" r="2" />
-                      </svg>
-                    </span>
-                  )}
-                </span>
-                
-                {/* Label */}
-                <span className="relative z-10 text-sm">{link.label}</span>
-                
-                {/* Arrow indicator on hover */}
-                <svg className="w-4 h-4 ml-auto opacity-0 group-hover:opacity-100 transition-all duration-200 text-blue-400 dark:text-blue-500 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-0 bg-brass-500 group-hover:h-6 transition-all duration-200" />
+                <Icon className="w-4 h-4 flex-shrink-0 text-navy-400 group-hover:text-brass-400 transition-colors duration-150" strokeWidth={1.75} />
+                <span>{link.label}</span>
+                <ChevronRight className="w-3.5 h-3.5 ml-auto opacity-0 group-hover:opacity-100 transition-opacity duration-150 text-brass-400" strokeWidth={2} />
               </button>
             );
           })}
         </nav>
 
-        {/* Bottom Section - Fixed at bottom */}
-        <div className="flex-shrink-0 border-t border-gray-100 dark:border-gray-700/50">
-          <div className="px-3 py-3 space-y-1">
-            {/* Notifications */}
+        {/* Bottom section */}
+        <div className="flex-shrink-0 border-t border-navy-700">
+          <div className="px-3 py-3 space-y-0.5">
             <button
               onClick={clearNotifications}
-              className="relative w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-all duration-200 text-sm group"
+              className="relative w-full flex items-center gap-3 px-4 py-2.5 rounded text-navy-200 hover:bg-navy-700 hover:text-white transition-colors duration-150 text-sm"
             >
-              <span className="text-lg group-hover:scale-110 transition-transform duration-200">🔔</span>
+              <Bell className="w-4 h-4" strokeWidth={1.75} />
               <span>Notifications</span>
               {totalNotifications > 0 && (
-                <span className="ml-auto bg-red-500 text-white text-xs min-w-[20px] h-5 flex items-center justify-center rounded-full px-1.5 font-bold animate-pulse">
+                <span className="ml-auto bg-oxbrick-600 text-white text-xs min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1 font-semibold">
                   {totalNotifications}
                 </span>
               )}
             </button>
 
-            {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
-              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-all duration-200 text-sm group"
+              className="w-full flex items-center gap-3 px-4 py-2.5 rounded text-navy-200 hover:bg-navy-700 hover:text-white transition-colors duration-150 text-sm"
             >
-              <span className="text-lg group-hover:scale-110 transition-transform duration-200">
-                {dark ? '☀️' : '🌙'}
-              </span>
+              {dark ? <Sun className="w-4 h-4" strokeWidth={1.75} /> : <Moon className="w-4 h-4" strokeWidth={1.75} />}
               <span>{dark ? 'Light Mode' : 'Dark Mode'}</span>
-              {/* Toggle switch visual */}
-              <span className={`ml-auto w-9 h-5 rounded-full relative transition-colors duration-300 ${dark ? 'bg-blue-600' : 'bg-gray-300'}`}>
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-300 ${dark ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              <span className={`ml-auto w-8 h-4 rounded-full relative transition-colors duration-300 ${dark ? 'bg-brass-500' : 'bg-navy-600'}`}>
+                <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform duration-300 ${dark ? 'translate-x-4' : 'translate-x-0.5'}`} />
               </span>
             </button>
           </div>
 
-          {/* User Info */}
-          <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-700/50">
+          {/* User info */}
+          <div className="px-5 py-4 border-t border-navy-700">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg flex-shrink-0 text-sm">
+              <div className="w-9 h-9 rounded bg-navy-600 border border-brass-500/30 flex items-center justify-center font-display font-semibold text-brass-300 flex-shrink-0 text-sm">
                 {user?.full_name?.charAt(0) || user?.display_name?.charAt(0) || 'U'}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                <p className="text-sm font-semibold text-white truncate">
                   {user?.full_name || user?.display_name || 'User'}
                 </p>
-                <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-md mt-0.5 ${getRoleBadge(user?.role)}`}>
+                <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded mt-0.5 ${getRoleBadge(user?.role)}`}>
                   {user?.role?.replace('_', ' ') || 'user'}
                 </span>
               </div>
             </div>
-            
-            {/* Sign Out */}
+
             <button
               onClick={() => {
                 logout();
                 navigate('/login');
               }}
-              className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200 text-sm font-medium group"
+              className="w-full flex items-center gap-2 px-4 py-2.5 rounded text-oxbrick-400 hover:bg-oxbrick-700/20 hover:text-oxbrick-300 transition-colors duration-150 text-sm font-medium"
             >
-              <svg className="w-4 h-4 group-hover:translate-x-0.5 transition-transform duration-200" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
+              <LogOut className="w-4 h-4" strokeWidth={1.75} />
               Sign Out
             </button>
           </div>
@@ -204,74 +190,33 @@ export default function Layout({ children, navLinks }) {
       </aside>
 
       {/* Main content area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {/* Mobile top bar */}
-        <div className="lg:hidden bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200/60 dark:border-gray-700/50 p-4 flex items-center justify-between sticky top-0 z-20 backdrop-blur-sm bg-white/90 dark:bg-gray-800/90">
+        <div className="lg:hidden bg-navy-800 p-4 flex items-center justify-between sticky top-0 z-20 flex-shrink-0">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-gray-500 dark:text-gray-300 p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="text-navy-300 hover:text-white p-2 rounded transition-colors"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
+            <Menu className="w-5 h-5" strokeWidth={1.75} />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg overflow-hidden border-2 border-blue-200 dark:border-blue-500/30 shadow-md">
+            <div className="w-7 h-7 rounded overflow-hidden border border-brass-500/40">
               <img src="/logo.jpg" alt="Logo" className="w-full h-full object-cover" />
             </div>
-            <h2 className="text-lg font-extrabold text-gray-900 dark:text-white">
-              Dayspring<span className="text-blue-600 dark:text-blue-400"> Hub</span>
+            <h2 className="text-base font-display font-semibold text-white">
+              Dayspring <span className="text-brass-400">Hub</span>
             </h2>
           </div>
-          <div className="w-8" />
+          <div className="w-9" />
         </div>
 
-        {/* Page content */}
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-          <div className="animate-fade-in-up">
+        {/* Page content - fills remaining height, scrollable */}
+        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+          <div className="animate-fade-in-up min-h-full">
             {children}
           </div>
         </main>
       </div>
-
-      {/* Custom styles */}
-      <style>{`
-        @keyframes fade-in-up {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in-up { animation: fade-in-up 0.5s ease-out both; }
-        
-        /* Custom scrollbar */
-        .scrollbar-thin {
-          scrollbar-width: thin;
-          scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
-        }
-        .scrollbar-thin::-webkit-scrollbar {
-          width: 4px;
-        }
-        .scrollbar-thin::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .scrollbar-thin::-webkit-scrollbar-thumb {
-          background-color: rgba(156, 163, 175, 0.3);
-          border-radius: 10px;
-        }
-        .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-          background-color: rgba(156, 163, 175, 0.5);
-        }
-        
-        /* Dark mode scrollbar */
-        .dark .scrollbar-thin {
-          scrollbar-color: rgba(75, 85, 99, 0.5) transparent;
-        }
-        .dark .scrollbar-thin::-webkit-scrollbar-thumb {
-          background-color: rgba(75, 85, 99, 0.5);
-        }
-        .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-          background-color: rgba(75, 85, 99, 0.7);
-        }
-      `}</style>
     </div>
   );
 }
