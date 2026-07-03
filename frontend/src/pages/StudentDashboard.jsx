@@ -22,6 +22,7 @@ import {
   Download,
   Eye,
   Loader2,
+  ArrowLeft,
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://dayspring-hub.onrender.com/api/v1/';
@@ -51,6 +52,7 @@ export default function StudentDashboard() {
   const [quizQuestions, setQuizQuestions] = useState([]);
   const [responses, setResponses] = useState({});
   const [loadingQuiz, setLoadingQuiz] = useState(false);
+  const [submittingQuiz, setSubmittingQuiz] = useState(false);
 
   // Quiz results state
   const [myQuizResults, setMyQuizResults] = useState({});
@@ -138,8 +140,6 @@ export default function StudentDashboard() {
   const startQuiz = async (quizId) => {
     setLoadingQuiz(true);
     try {
-      console.log('Starting quiz with ID:', quizId);
-      
       const res = await fetch(`${API_URL}quizzes/${quizId}/take`, {
         headers: { 
           Authorization: `Bearer ${user.access_token}`,
@@ -147,36 +147,36 @@ export default function StudentDashboard() {
         },
       });
       
-      console.log('Quiz response status:', res.status);
-      
       if (res.ok) {
         const data = await res.json();
-        console.log('Quiz data received:', data);
         
-        // Handle different response structures
-        let quizData = data;
-        let questionsData = data.questions || [];
+        // Handle the response structure - get quiz and questions
+        const quiz = data.quiz || data;
+        const questions = data.questions || [];
         
-        // If the response has a nested structure
-        if (data.quiz) {
-          quizData = data.quiz;
-          questionsData = data.questions || [];
+        if (!quiz || !quiz.id) {
+          showMsg('Invalid quiz data received', 'error');
+          setLoadingQuiz(false);
+          return;
         }
         
-        // Ensure we have questions
-        if (!questionsData || questionsData.length === 0) {
+        if (!questions || questions.length === 0) {
           showMsg('This quiz has no questions.', 'error');
           setLoadingQuiz(false);
           return;
         }
         
-        setActiveQuiz(quizData);
-        setQuizQuestions(questionsData);
+        // Set the active quiz and questions
+        setActiveQuiz(quiz);
+        setQuizQuestions(questions);
         setResponses({});
-        showMsg('Quiz loaded successfully!', 'success');
+        
+        // Switch to the quizzes tab to show the quiz interface
+        setTab('quizzes');
+        
+        showMsg('Quiz loaded! Answer all questions and submit.', 'success');
       } else {
         const errorData = await res.json().catch(() => ({}));
-        console.error('Failed to load quiz:', errorData);
         showMsg(errorData.detail || 'Failed to load quiz. Please try again.', 'error');
       }
     } catch (err) {
@@ -195,6 +195,8 @@ export default function StudentDashboard() {
   };
 
   const submitQuiz = async () => {
+    if (!activeQuiz) return;
+    
     // Check if all questions are answered
     const unansweredQuestions = quizQuestions.filter(q => {
       const response = responses[q.id];
@@ -209,6 +211,8 @@ export default function StudentDashboard() {
       showMsg(`Please answer all questions before submitting. (${unansweredQuestions.length} unanswered)`, 'error');
       return;
     }
+
+    setSubmittingQuiz(true);
 
     const answers = quizQuestions.map(q => ({
       question_id: q.id,
@@ -228,16 +232,29 @@ export default function StudentDashboard() {
 
       if (res.ok) {
         showMsg('Quiz submitted successfully!');
+        // Reset quiz state
         setActiveQuiz(null);
         setQuizQuestions([]);
         setResponses({});
-        fetchData();
+        // Refresh data to get updated quiz status
+        await fetchData();
       } else {
         const err = await res.json().catch(() => ({}));
         showMsg(err.detail || 'Submission failed', 'error');
       }
     } catch (err) {
-      showMsg('Submission failed', 'error');
+      showMsg('Submission failed. Please try again.', 'error');
+    } finally {
+      setSubmittingQuiz(false);
+    }
+  };
+
+  const cancelQuiz = () => {
+    if (window.confirm('Are you sure you want to cancel? Your progress will be lost.')) {
+      setActiveQuiz(null);
+      setQuizQuestions([]);
+      setResponses({});
+      showMsg('Quiz cancelled', 'success');
     }
   };
 
@@ -298,7 +315,7 @@ export default function StudentDashboard() {
     return quizSubmissions.some(s => s.quiz_id === quizId && s.submitted);
   };
 
-  // Grade status colors — forest (good) / brass (pending) / oxbrick (poor)
+  // Grade status colors
   const getGradeColor = (percentage) => {
     if (percentage >= 70) return 'text-forest-600 dark:text-forest-500';
     if (percentage >= 40) return 'text-brass-600 dark:text-brass-400';
@@ -333,7 +350,6 @@ export default function StudentDashboard() {
     { label: 'Quizzes', onClick: () => setTab('quizzes') },
   ];
 
-  // Shared section header — navy badge, brass icon, used across every tab
   const SectionIcon = ({ Icon }) => (
     <div className="w-11 h-11 rounded-xl bg-navy-700 flex items-center justify-center text-brass-400 flex-shrink-0">
       <Icon className="w-5 h-5" strokeWidth={1.75} />
@@ -347,6 +363,112 @@ export default function StudentDashboard() {
     </div>
   );
 
+  // If a quiz is active, show the quiz taking interface
+  if (activeQuiz) {
+    return (
+      <Layout role="student" navLinks={navLinks}>
+        <div className="mb-8 animate-fade-in-up">
+          <button 
+            onClick={cancelQuiz}
+            className="inline-flex items-center gap-2 text-ink-500 dark:text-ink-300 hover:text-navy-700 dark:hover:text-white mb-4 transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" strokeWidth={1.75} />
+            Back to Quizzes
+          </button>
+          <h1 className="text-3xl md:text-4xl font-display font-semibold text-navy-800 dark:text-white flex items-center gap-3">
+            <Brain className="w-9 h-9 text-brass-500" strokeWidth={1.75} />
+            {activeQuiz.title}
+          </h1>
+          {activeQuiz.description && (
+            <p className="text-ink-500 dark:text-ink-300 mt-2">{activeQuiz.description}</p>
+          )}
+          <p className="text-sm text-ink-400 dark:text-ink-500 mt-1">
+            {quizQuestions.length} question{quizQuestions.length > 1 ? 's' : ''} · 
+            Answer all questions to submit
+          </p>
+        </div>
+
+        {msg && (
+          <div className={`px-4 py-3 rounded-xl mb-6 text-sm font-medium animate-fade-in-up flex items-center gap-2 ${
+            msgType === 'error'
+              ? 'bg-oxbrick-50 dark:bg-oxbrick-700/20 text-oxbrick-600 dark:text-oxbrick-500 border border-oxbrick-200 dark:border-oxbrick-700/40'
+              : 'bg-forest-50 dark:bg-forest-700/20 text-forest-600 dark:text-forest-500 border border-forest-500/20'
+          }`}>
+            {msgType === 'error' ? <AlertCircle className="w-4 h-4" strokeWidth={1.75} /> : <CheckCircle2 className="w-4 h-4" strokeWidth={1.75} />}
+            {msg}
+          </div>
+        )}
+
+        <div className="space-y-6 animate-fade-in-up">
+          {quizQuestions.map((q, idx) => (
+            <div key={q.id} className="bg-white dark:bg-navy-800 rounded-2xl shadow-card border border-ink-200 dark:border-navy-600 p-6 hover:shadow-elevated transition-shadow duration-200">
+              <div className="flex items-start justify-between mb-4">
+                <h3 className="font-semibold text-lg text-navy-800 dark:text-white">
+                  Question {idx + 1} of {quizQuestions.length}
+                </h3>
+                <span className="text-xs bg-ink-100 dark:bg-navy-700 px-3 py-1 rounded-full text-ink-600 dark:text-ink-300 font-medium">
+                  {q.question_type === 'multiple_choice' ? 'Multiple Choice' : 'Text Answer'}
+                </span>
+              </div>
+              <p className="text-navy-700 dark:text-ink-200 mb-4">{q.question_text}</p>
+              
+              {q.question_type === 'multiple_choice' ? (
+                <div className="space-y-3">
+                  {q.options && q.options.map((opt) => (
+                    <label 
+                      key={opt.id} 
+                      className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                        responses[q.id]?.selected_option_id === opt.id
+                          ? 'border-brass-500 bg-brass-50 dark:bg-brass-700/20'
+                          : 'border-ink-200 dark:border-navy-600 hover:border-ink-300 dark:hover:border-navy-500 hover:bg-ink-50 dark:hover:bg-navy-700'
+                      }`}
+                    >
+                      <input 
+                        type="radio" 
+                        name={`question-${q.id}`} 
+                        value={opt.id}
+                        checked={responses[q.id]?.selected_option_id === opt.id}
+                        onChange={() => handleAnswerChange(q.id, opt.id, 'option')}
+                        className="w-4 h-4 text-brass-600 border-ink-300 focus:ring-brass-500" 
+                      />
+                      <span className="text-navy-700 dark:text-ink-200">{opt.option_text}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <textarea 
+                  value={responses[q.id]?.text_answer || ''}
+                  onChange={(e) => handleAnswerChange(q.id, e.target.value, 'text')}
+                  placeholder="Type your answer here..."
+                  rows={4}
+                  className="w-full px-4 py-3 rounded-xl border border-ink-200 dark:border-navy-600 focus:border-brass-500 focus:ring-4 focus:ring-brass-50 dark:focus:ring-brass-500/20 outline-none transition-colors bg-white dark:bg-navy-700 text-navy-800 dark:text-white placeholder-ink-300 dark:placeholder-ink-500"
+                />
+              )}
+            </div>
+          ))}
+
+          <div className="flex flex-col sm:flex-row gap-4 pt-4">
+            <button
+              onClick={submitQuiz}
+              disabled={submittingQuiz}
+              className="flex-1 bg-brass-600 hover:bg-brass-700 text-white font-semibold px-8 py-4 rounded-2xl shadow-soft transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {submittingQuiz ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" strokeWidth={1.75} />}
+              {submittingQuiz ? 'Submitting...' : 'Submit Answers'}
+            </button>
+            <button
+              onClick={cancelQuiz}
+              className="flex-1 bg-ink-100 dark:bg-navy-700 hover:bg-ink-200 dark:hover:bg-navy-600 text-ink-700 dark:text-ink-300 font-semibold px-8 py-4 rounded-2xl transition-colors duration-150"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // Main dashboard view (when no quiz is active)
   return (
     <Layout role="student" navLinks={navLinks}>
       <div className="mb-8 animate-fade-in-up">
@@ -410,7 +532,6 @@ export default function StudentDashboard() {
                 {viewingResult.total_possible > 0 ? Math.round((viewingResult.total_points / viewingResult.total_possible) * 100) : 0}%
               </p>
               
-              {/* Show grading status */}
               {viewingResult.graded_count === viewingResult.total_questions ? (
                 <p className="text-forest-600 dark:text-forest-500 text-xs font-semibold mt-2 flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={1.75} /> Fully Graded
@@ -460,7 +581,6 @@ export default function StudentDashboard() {
                       )}
                     </div>
 
-                    {/* Show student's answer */}
                     {ans.question_type === 'multiple_choice' ? (
                       <p className="text-sm text-ink-600 dark:text-ink-300 mb-2">
                         Your answer: <span className="font-semibold text-navy-800 dark:text-ink-100">
@@ -477,7 +597,6 @@ export default function StudentDashboard() {
                       </div>
                     )}
 
-                    {/* Show correct answer if enabled */}
                     {showCorrectAnswers && ans.question_type === 'multiple_choice' && ans.correct_answer && (
                       <div className="mt-2 bg-forest-50 dark:bg-forest-700/20 border border-forest-200 dark:border-forest-700/40 rounded-lg p-2">
                         <p className="text-xs text-forest-700 dark:text-forest-400">
@@ -510,7 +629,7 @@ export default function StudentDashboard() {
       {/* ===== HOME TAB ===== */}
       {tab === 'home' && (
         <div className="space-y-8 animate-fade-in-up">
-          {/* Quick stats — one consistent navy tile, brass icon accent */}
+          {/* Quick stats */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="bg-navy-700 rounded-2xl p-5 shadow-card text-white">
               <div className="flex items-center justify-between mb-3">
@@ -853,119 +972,78 @@ export default function StudentDashboard() {
         <div className="space-y-8 animate-fade-in-up">
           <div className="flex items-center gap-3 mb-4">
             <SectionIcon Icon={Brain} />
-            <h2 className="text-2xl font-display font-semibold text-navy-800 dark:text-white">Quizzes</h2>
+            <h2 className="text-2xl font-display font-semibold text-navy-800 dark:text-white">Available Quizzes</h2>
           </div>
 
-          {!activeQuiz ? (
-            <>
-              {availableQuizzes.length === 0 ? (
-                <EmptyState label="No quizzes available yet." />
-              ) : (
-                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                  {availableQuizzes.map(quiz => {
-                    const submitted = isQuizSubmitted(quiz.id);
-                    const result = myQuizResults[quiz.id];
-                    const percentage = result && result.total_possible > 0 ? Math.round((result.total_points / result.total_possible) * 100) : 0;
-                    return (
-                      <div key={quiz.id} className="bg-white dark:bg-navy-800 rounded-2xl shadow-card border border-ink-200 dark:border-navy-600 p-6 hover:shadow-elevated transition-shadow duration-200">
-                        <h3 className="font-semibold text-xl text-navy-800 dark:text-white mb-2">{quiz.title}</h3>
-                        {quiz.description && <p className="text-sm text-ink-500 dark:text-ink-300 mb-4">{quiz.description}</p>}
-                        {submitted ? (
-                          <div>
-                            <div className="flex items-center gap-2 text-forest-600 dark:text-forest-500 mb-3">
-                              <CheckCircle2 className="w-4 h-4" strokeWidth={1.75} /><span className="font-semibold text-sm">Completed</span>
+          {availableQuizzes.length === 0 ? (
+            <EmptyState label="No quizzes available yet." />
+          ) : (
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              {availableQuizzes.map(quiz => {
+                const submitted = isQuizSubmitted(quiz.id);
+                const result = myQuizResults[quiz.id];
+                const percentage = result && result.total_possible > 0 ? Math.round((result.total_points / result.total_possible) * 100) : 0;
+                return (
+                  <div key={quiz.id} className="bg-white dark:bg-navy-800 rounded-2xl shadow-card border border-ink-200 dark:border-navy-600 p-6 hover:shadow-elevated transition-shadow duration-200">
+                    <h3 className="font-semibold text-xl text-navy-800 dark:text-white mb-2">{quiz.title}</h3>
+                    {quiz.description && <p className="text-sm text-ink-500 dark:text-ink-300 mb-4">{quiz.description}</p>}
+                    {submitted ? (
+                      <div>
+                        <div className="flex items-center gap-2 text-forest-600 dark:text-forest-500 mb-3">
+                          <CheckCircle2 className="w-4 h-4" strokeWidth={1.75} /><span className="font-semibold text-sm">Completed</span>
+                        </div>
+                        {result ? (
+                          <div className="bg-ink-50 dark:bg-navy-700 rounded-xl p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-ink-500 dark:text-ink-300">Score:</span>
+                              <span className={`font-semibold ${getGradeColor(percentage)}`}>{result.total_points}/{result.total_possible}</span>
                             </div>
-                            {result ? (
-                              <div className="bg-ink-50 dark:bg-navy-700 rounded-xl p-3 space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm text-ink-500 dark:text-ink-300">Score:</span>
-                                  <span className={`font-semibold ${getGradeColor(percentage)}`}>{result.total_points}/{result.total_possible}</span>
-                                </div>
-                                <div className="w-full bg-ink-200 dark:bg-navy-600 rounded-full h-2">
-                                  <div className={`h-2 rounded-full ${percentage >= 70 ? 'bg-forest-600' : percentage >= 40 ? 'bg-brass-500' : 'bg-oxbrick-600'}`} style={{ width: `${percentage}%` }} />
-                                </div>
-                                <div className="flex items-center justify-between text-xs text-ink-500 dark:text-ink-300">
-                                  <span>{percentage}%</span>
-                                  <span>{result.graded_count}/{result.total_questions} graded</span>
-                                </div>
-                                {result.auto_graded && (
-                                  <div className="flex items-center gap-1 text-forest-600 dark:text-forest-500 text-xs">
-                                    <Zap className="w-3 h-3" strokeWidth={1.75} /> Auto-graded
-                                  </div>
-                                )}
-                                <div className="flex flex-col gap-2">
-                                  <button onClick={() => setViewingResult(result)}
-                                    className="w-full bg-brass-50 dark:bg-brass-700/20 text-brass-700 dark:text-brass-400 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-brass-100 dark:hover:bg-brass-700/30 transition-colors">
-                                    View Details
-                                  </button>
-                                  <button 
-                                    onClick={() => downloadQuizResults(quiz.id)}
-                                    disabled={exportingResults}
-                                    className="w-full bg-forest-50 dark:bg-forest-700/20 text-forest-700 dark:text-forest-400 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-forest-100 dark:hover:bg-forest-700/30 transition-colors flex items-center justify-center gap-2">
-                                    <Download className="w-3.5 h-3.5" strokeWidth={1.75} />
-                                    {exportingResults ? 'Downloading...' : 'Download Results'}
-                                  </button>
-                                </div>
+                            <div className="w-full bg-ink-200 dark:bg-navy-600 rounded-full h-2">
+                              <div className={`h-2 rounded-full ${percentage >= 70 ? 'bg-forest-600' : percentage >= 40 ? 'bg-brass-500' : 'bg-oxbrick-600'}`} style={{ width: `${percentage}%` }} />
+                            </div>
+                            <div className="flex items-center justify-between text-xs text-ink-500 dark:text-ink-300">
+                              <span>{percentage}%</span>
+                              <span>{result.graded_count}/{result.total_questions} graded</span>
+                            </div>
+                            {result.auto_graded && (
+                              <div className="flex items-center gap-1 text-forest-600 dark:text-forest-500 text-xs">
+                                <Zap className="w-3 h-3" strokeWidth={1.75} /> Auto-graded
                               </div>
-                            ) : (
-                              <button onClick={() => fetchMyQuizResult(quiz.id)} 
-                                className="w-full bg-brass-50 dark:bg-brass-700/20 text-brass-700 dark:text-brass-400 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-brass-100 dark:hover:bg-brass-700/30 transition-colors">
-                                Load Result
-                              </button>
                             )}
+                            <div className="flex flex-col gap-2">
+                              <button onClick={() => setViewingResult(result)}
+                                className="w-full bg-brass-50 dark:bg-brass-700/20 text-brass-700 dark:text-brass-400 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-brass-100 dark:hover:bg-brass-700/30 transition-colors">
+                                View Details
+                              </button>
+                              <button 
+                                onClick={() => downloadQuizResults(quiz.id)}
+                                disabled={exportingResults}
+                                className="w-full bg-forest-50 dark:bg-forest-700/20 text-forest-700 dark:text-forest-400 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-forest-100 dark:hover:bg-forest-700/30 transition-colors flex items-center justify-center gap-2">
+                                <Download className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                {exportingResults ? 'Downloading...' : 'Download Results'}
+                              </button>
+                            </div>
                           </div>
                         ) : (
-                          <button 
-                            onClick={() => startQuiz(quiz.id)}
-                            disabled={loadingQuiz}
-                            className="w-full bg-brass-600 hover:bg-brass-700 text-white font-semibold px-5 py-2.5 rounded-xl shadow-soft transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                          >
-                            {loadingQuiz ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                            {loadingQuiz ? 'Loading...' : 'Start Quiz'}
+                          <button onClick={() => fetchMyQuizResult(quiz.id)} 
+                            className="w-full bg-brass-50 dark:bg-brass-700/20 text-brass-700 dark:text-brass-400 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-brass-100 dark:hover:bg-brass-700/30 transition-colors">
+                            Load Result
                           </button>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="bg-white dark:bg-navy-800 rounded-3xl shadow-card border border-ink-200 dark:border-navy-600 p-6 md:p-8">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-display font-semibold text-navy-800 dark:text-white">{activeQuiz.title}</h2>
-                <button onClick={() => { setActiveQuiz(null); setQuizQuestions([]); setResponses({}); }} className="text-ink-500 dark:text-ink-300 hover:text-navy-700 dark:hover:text-white text-sm font-medium">Cancel</button>
-              </div>
-              {activeQuiz.description && <p className="text-ink-600 dark:text-ink-300 mb-8">{activeQuiz.description}</p>}
-              <div className="space-y-8">
-                {quizQuestions.map((q, idx) => (
-                  <div key={q.id} className="border border-ink-200 dark:border-navy-600 rounded-2xl p-5">
-                    <p className="font-semibold text-lg text-navy-800 dark:text-ink-100 mb-3">{idx + 1}. {q.question_text}</p>
-                    {q.question_type === 'multiple_choice' ? (
-                      <div className="space-y-2">
-                        {q.options && q.options.map(opt => (
-                          <label key={opt.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-ink-50 dark:hover:bg-navy-700/50 cursor-pointer transition-colors">
-                            <input type="radio" name={`question-${q.id}`} value={opt.id}
-                              checked={responses[q.id]?.selected_option_id === opt.id}
-                              onChange={() => handleAnswerChange(q.id, opt.id, 'option')}
-                              className="w-4 h-4 text-brass-600 border-ink-300 focus:ring-brass-500" />
-                            <span className="text-navy-700 dark:text-ink-200 text-sm">{opt.option_text}</span>
-                          </label>
-                        ))}
-                      </div>
                     ) : (
-                      <textarea value={responses[q.id]?.text_answer || ''}
-                        onChange={(e) => handleAnswerChange(q.id, e.target.value, 'text')}
-                        placeholder="Type your answer..." rows={3}
-                        className="w-full px-4 py-3 rounded-xl border border-ink-200 dark:border-navy-600 focus:border-brass-500 focus:ring-4 focus:ring-brass-50 dark:focus:ring-brass-500/20 outline-none transition-colors bg-white dark:bg-navy-700 text-navy-800 dark:text-white placeholder-ink-300 dark:placeholder-ink-500" />
+                      <button 
+                        onClick={() => startQuiz(quiz.id)}
+                        disabled={loadingQuiz}
+                        className="w-full bg-brass-600 hover:bg-brass-700 text-white font-semibold px-5 py-3 rounded-xl shadow-soft transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {loadingQuiz ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" strokeWidth={1.75} />}
+                        {loadingQuiz ? 'Loading...' : 'Take Quiz'}
+                      </button>
                     )}
                   </div>
-                ))}
-                <button onClick={submitQuiz}
-                  className="w-full bg-brass-600 hover:bg-brass-700 text-white font-semibold px-8 py-3.5 rounded-2xl shadow-soft transition-colors duration-150">
-                  Submit Answers
-                </button>
-              </div>
+                );
+              })}
             </div>
           )}
         </div>
