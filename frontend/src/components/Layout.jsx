@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -70,6 +70,7 @@ export default function Layout({ children, navLinks }) {
 
   return (
     <div className="min-h-screen flex bg-parchment dark:bg-navy-900 transition-colors duration-300">
+      {/* Sidebar Overlay for mobile */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-30 bg-navy-900/50 backdrop-blur-sm lg:hidden transition-opacity duration-300"
@@ -77,13 +78,13 @@ export default function Layout({ children, navLinks }) {
         />
       )}
 
-      {/* Sidebar — fixed Oxford Navy identity, unchanged by theme toggle */}
+      {/* Sidebar — Fixed position, doesn't scroll with content */}
       <aside
-        className={`fixed top-0 left-0 z-40 h-full w-72 bg-navy-800 shadow-elevated transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-auto flex flex-col ${
+        className={`fixed top-0 left-0 z-40 h-screen w-72 bg-navy-800 shadow-elevated transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:z-auto flex flex-col ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        {/* Brand + horizon line signature */}
+        {/* Brand + horizon line signature - Fixed at top */}
         <div className="flex-shrink-0">
           <div className="flex items-center justify-between p-5">
             <div className="flex items-center gap-3">
@@ -106,7 +107,7 @@ export default function Layout({ children, navLinks }) {
           <div className="h-px bg-gradient-to-r from-transparent via-brass-500 to-transparent opacity-70" />
         </div>
 
-        {/* Navigation */}
+        {/* Navigation - Scrollable area */}
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5 scrollbar-thin">
           <p className="px-4 py-2 text-xs font-semibold text-navy-400 uppercase tracking-wider">
             Navigation
@@ -132,7 +133,7 @@ export default function Layout({ children, navLinks }) {
           })}
         </nav>
 
-        {/* Bottom section */}
+        {/* Bottom section - Fixed at bottom */}
         <div className="flex-shrink-0 border-t border-navy-700">
           <div className="px-3 py-3 space-y-0.5">
             <button
@@ -160,7 +161,7 @@ export default function Layout({ children, navLinks }) {
             </button>
           </div>
 
-          {/* User info */}
+          {/* User info - Fixed at bottom */}
           <div className="px-5 py-4 border-t border-navy-700">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-9 h-9 rounded bg-navy-600 border border-brass-500/30 flex items-center justify-center font-display font-semibold text-brass-300 flex-shrink-0 text-sm">
@@ -190,10 +191,10 @@ export default function Layout({ children, navLinks }) {
         </div>
       </aside>
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile top bar — navy, matches sidebar identity */}
-        <div className="lg:hidden bg-navy-800 p-4 flex items-center justify-between sticky top-0 z-20">
+      {/* Main content area - Scrollable */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
+        {/* Mobile top bar — fixed at top */}
+        <div className="lg:hidden bg-navy-800 p-4 flex items-center justify-between sticky top-0 z-20 flex-shrink-0">
           <button
             onClick={() => setSidebarOpen(true)}
             className="text-navy-300 hover:text-white p-2 rounded transition-colors"
@@ -211,9 +212,9 @@ export default function Layout({ children, navLinks }) {
           <div className="w-9" />
         </div>
 
-        {/* Page content */}
-        <main className="flex-1 p-4 md:p-8 overflow-y-auto">
-          <div className="animate-fade-in-up">
+        {/* Page content - Scrollable area with padding */}
+        <main className="flex-1 p-4 md:p-8">
+          <div className="animate-fade-in-up max-w-7xl mx-auto">
             {children}
           </div>
         </main>
