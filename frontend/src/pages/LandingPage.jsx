@@ -1,41 +1,62 @@
-import { useNavigate } from 'react-router-dom';
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useTheme } from '../context/ThemeContext';
 import {
   BookOpen, ClipboardList, Megaphone, Download, ArrowRight,
   GraduationCap, Users, Heart, Shield, Zap, Globe,
-  Menu, X, ChevronRight,
+  X, Menu,
 } from 'lucide-react';
 
 const useClickSound = () => {
   const audioRef = useRef(null);
-  if (!audioRef.current) { audioRef.current = new Audio('/sounds/click.mp3'); audioRef.current.volume = 0.2; }
-  return useCallback(() => { audioRef.current?.play().catch(() => {}); }, []);
+  if (!audioRef.current) {
+    audioRef.current = new Audio('/sounds/click.mp3');
+    audioRef.current.volume = 0.2;
+  }
+  return useCallback(() => {
+    audioRef.current?.play().catch(() => {});
+  }, []);
 };
 
 export default function LandingPage() {
-  const navigate = useNavigate();
   const playClick = useClickSound();
-  const { dark } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [featuresVisible, setFeaturesVisible] = useState(false);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
 
   useEffect(() => {
     const dismissed = localStorage.getItem('installPromptDismissed');
-    if (!dismissed) { const t = setTimeout(() => setShowInstallPrompt(true), 3000); return () => clearTimeout(t); }
+    if (!dismissed) {
+      const timer = setTimeout(() => setShowInstallPrompt(true), 3000);
+      return () => clearTimeout(timer);
+    }
   }, []);
 
-  const handleInstall = () => {
-    const link = document.createElement('a'); link.href = '/dayspring-hub.apk'; link.download = 'Dayspring-Hub.apk';
-    document.body.appendChild(link); link.click(); document.body.removeChild(link);
-    setShowInstallPrompt(false); localStorage.setItem('installPromptDismissed', 'true');
+  const goToLogin = () => {
+    playClick();
+    window.location.href = '/login';
   };
-  const dismissInstall = () => { setShowInstallPrompt(false); localStorage.setItem('installPromptDismissed', 'true'); };
+
+  const handleInstall = () => {
+    const link = document.createElement('a');
+    link.href = '/dayspring-hub.apk';
+    link.download = 'Dayspring-Hub.apk';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setShowInstallPrompt(false);
+    localStorage.setItem('installPromptDismissed', 'true');
+  };
+
+  const dismissInstall = () => {
+    setShowInstallPrompt(false);
+    localStorage.setItem('installPromptDismissed', 'true');
+  };
 
   const featuresRef = useRef(null);
   useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) { setFeaturesVisible(true); observer.disconnect(); } }, { threshold: 0.1 });
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setFeaturesVisible(true); observer.disconnect(); } },
+      { threshold: 0.1 }
+    );
     if (featuresRef.current) observer.observe(featuresRef.current);
     return () => observer.disconnect();
   }, []);
@@ -56,7 +77,7 @@ export default function LandingPage() {
   const stats = [
     { value: '24/7', label: 'Access Anywhere', Icon: Globe },
     { value: '100%', label: 'Digital Learning', Icon: Zap },
-    { value: '4 Roles', label: 'Unified Platform', Icon: Users },
+    { value: '4', label: 'User Roles', Icon: Users },
   ];
 
   return (
@@ -79,14 +100,14 @@ export default function LandingPage() {
       )}
 
       <div className="relative z-10 flex flex-col min-h-screen">
-        {/* Animated blobs */}
+        {/* Floating blobs */}
         <div className="absolute top-0 left-0 w-48 h-48 bg-navy-100 dark:bg-navy-800 rounded-full blur-3xl opacity-30 dark:opacity-20 animate-float-left" />
         <div className="absolute bottom-0 right-0 w-64 h-64 bg-brass-100 dark:bg-brass-900/40 rounded-full blur-3xl opacity-30 dark:opacity-20 animate-float-right" />
 
         {/* Navbar */}
         <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/70 dark:bg-navy-900/70 border-b border-ink-200 dark:border-navy-700 animate-slide-down">
           <nav className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
-            <div className="flex items-center gap-2 cursor-pointer">
+            <div className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-xl overflow-hidden border-2 border-brass-200 dark:border-brass-500/30 shadow-soft flex-shrink-0">
                 <img src="/logo.jpg" alt="Dayspring Hub" className="w-full h-full object-cover" />
               </div>
@@ -94,24 +115,22 @@ export default function LandingPage() {
                 Dayspring<span className="text-brass-600 dark:text-brass-400"> Hub</span>
               </span>
             </div>
-
             <div className="hidden md:flex items-center gap-3">
               <button onClick={handleInstall} className="flex items-center gap-2 bg-ink-100 dark:bg-navy-700 hover:bg-ink-200 dark:hover:bg-navy-600 text-navy-700 dark:text-ink-200 px-4 py-2.5 rounded-2xl font-semibold text-sm transition-all duration-300">
                 <Download className="w-5 h-5" strokeWidth={1.75} /> Install App
               </button>
-              <button onClick={() => navigate('/login')} className="bg-brass-600 hover:bg-brass-700 text-white px-5 py-2.5 rounded-2xl font-semibold text-sm shadow-soft transition-all duration-300">
-                Sign In
-              </button>
+              <button onClick={goToLogin} className="bg-brass-600 hover:bg-brass-700 text-white px-5 py-2.5 rounded-2xl font-semibold text-sm shadow-soft transition-all duration-300">Sign In</button>
             </div>
-
             <button className="md:hidden p-2 rounded-xl hover:bg-ink-100 dark:hover:bg-navy-700 transition-colors" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
               {mobileMenuOpen ? <X className="w-6 h-6 text-navy-600 dark:text-ink-300" strokeWidth={1.75} /> : <Menu className="w-6 h-6 text-navy-600 dark:text-ink-300" strokeWidth={1.75} />}
             </button>
           </nav>
-          <div className={`md:hidden bg-white dark:bg-navy-900 border-b border-ink-200 dark:border-navy-700 px-4 pb-4 transition-all duration-300 ${mobileMenuOpen ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
-            <button onClick={() => { handleInstall(); setMobileMenuOpen(false); }} className="w-full mt-3 flex items-center justify-center gap-2 bg-ink-100 dark:bg-navy-700 text-navy-700 dark:text-ink-200 py-3 rounded-2xl font-semibold text-sm"><Download className="w-5 h-5" strokeWidth={1.75} /> Install App</button>
-            <button onClick={() => { navigate('/login'); setMobileMenuOpen(false); }} className="w-full mt-2 bg-brass-600 text-white py-3 rounded-2xl font-semibold shadow-soft text-sm">Sign In</button>
-          </div>
+          {mobileMenuOpen && (
+            <div className="md:hidden bg-white dark:bg-navy-900 border-b border-ink-200 dark:border-navy-700 px-4 pb-4">
+              <button onClick={() => { handleInstall(); setMobileMenuOpen(false); }} className="w-full mt-3 flex items-center justify-center gap-2 bg-ink-100 dark:bg-navy-700 text-navy-700 dark:text-ink-200 py-3 rounded-2xl font-semibold text-sm"><Download className="w-5 h-5" strokeWidth={1.75} /> Install App</button>
+              <button onClick={() => { goToLogin(); setMobileMenuOpen(false); }} className="w-full mt-2 bg-brass-600 text-white py-3 rounded-2xl font-semibold shadow-soft text-sm">Sign In</button>
+            </div>
+          )}
         </header>
 
         <main className="flex-grow relative">
@@ -120,24 +139,20 @@ export default function LandingPage() {
             <div className="grid lg:grid-cols-2 gap-8 sm:gap-12 lg:gap-16 items-center">
               <div className="animate-fade-in-left text-center sm:text-left">
                 <div className="inline-flex items-center gap-2 bg-brass-50 dark:bg-brass-700/20 border border-brass-200 dark:border-brass-700/40 text-brass-700 dark:text-brass-300 rounded-full px-3 py-1.5 text-xs sm:text-sm font-semibold mb-4 sm:mb-8 mx-auto sm:mx-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-brass-600 animate-ping" />
-                  <span>Trusted Digital Learning Platform</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-brass-600 animate-ping" /> Trusted Digital Learning Platform
                 </div>
                 <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-display font-semibold text-navy-800 dark:text-white leading-tight tracking-tight">
-                  Smart Learning
-                  <span className="block text-brass-600 dark:text-brass-400">Starts Here</span>
+                  Smart Learning <span className="block text-brass-600 dark:text-brass-400">Starts Here</span>
                 </h1>
                 <p className="mt-4 sm:mt-6 md:mt-8 text-sm sm:text-base md:text-lg text-ink-600 dark:text-ink-300 leading-relaxed max-w-2xl">
                   A modern education platform connecting teachers, students, parents, and administrators in one seamless digital ecosystem.
                 </p>
                 <div className="mt-6 sm:mt-8 md:mt-10">
                   <div className="flex flex-col sm:flex-row gap-3 w-full">
-                    <button onClick={() => navigate('/login')} className="w-full sm:w-auto bg-brass-600 hover:bg-brass-700 text-white px-8 py-4 rounded-2xl text-base font-semibold shadow-soft transition-all duration-300 active:scale-95 text-center">
-                      Get Started
+                    <button onClick={goToLogin} className="w-full sm:w-auto bg-brass-600 hover:bg-brass-700 text-white px-8 py-4 rounded-2xl text-base font-semibold shadow-soft transition-all duration-300 active:scale-95 text-center">
+                      Get Started <ArrowRight className="w-4 h-4 inline ml-1" strokeWidth={1.75} />
                     </button>
-                    <a href="#features" onClick={playClick} className="w-full sm:w-auto bg-white dark:bg-navy-800 border-2 border-ink-200 dark:border-navy-600 hover:border-brass-300 dark:hover:border-brass-500 text-navy-700 dark:text-ink-200 px-8 py-4 rounded-2xl text-base font-semibold transition-all duration-300 text-center active:scale-95">
-                      Learn More
-                    </a>
+                    <a href="#features" onClick={playClick} className="w-full sm:w-auto bg-white dark:bg-navy-800 border-2 border-ink-200 dark:border-navy-600 hover:border-brass-300 dark:hover:border-brass-500 text-navy-700 dark:text-ink-200 px-8 py-4 rounded-2xl text-base font-semibold transition-all duration-300 text-center active:scale-95">Learn More</a>
                   </div>
                 </div>
                 <div className="flex justify-center sm:justify-start flex-wrap gap-6 mt-8 sm:mt-12">
@@ -158,9 +173,7 @@ export default function LandingPage() {
                     <div className="space-y-3 sm:space-y-5">
                       {[{ Icon: BookOpen, title: 'Learning Materials', desc: 'Upload notes, PDFs & resources', bg: 'bg-navy-50 dark:bg-navy-600/30' },{ Icon: ClipboardList, title: 'Assignment Tracking', desc: 'Submit and review work easily', bg: 'bg-navy-50 dark:bg-navy-600/30' },{ Icon: Megaphone, title: 'Real-Time Updates', desc: 'School announcements instantly', bg: 'bg-navy-50 dark:bg-navy-600/30' }].map((item, idx) => (
                         <div key={idx} className={`flex items-center gap-3 p-3 rounded-xl sm:rounded-2xl ${item.bg} animate-fade-in-up`} style={{ animationDelay: `${idx * 0.15}s` }}>
-                          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-brass-600 flex items-center justify-center text-white flex-shrink-0 shadow-soft">
-                            <item.Icon className="w-5 h-5 sm:w-7 sm:h-7" strokeWidth={1.75} />
-                          </div>
+                          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-brass-600 flex items-center justify-center text-white flex-shrink-0 shadow-soft"><item.Icon className="w-5 h-5 sm:w-7 sm:h-7" strokeWidth={1.75} /></div>
                           <div className="min-w-0 flex-1"><h3 className="font-semibold text-sm sm:text-base text-navy-800 dark:text-white">{item.title}</h3><p className="text-xs sm:text-sm text-ink-500 dark:text-ink-400">{item.desc}</p></div>
                         </div>
                       ))}
@@ -181,9 +194,7 @@ export default function LandingPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
               {roles.map((role, i) => (
                 <div key={i} className="bg-white dark:bg-navy-800 rounded-2xl shadow-card border border-ink-200 dark:border-navy-600 p-5 sm:p-6 text-center hover:shadow-elevated transition-shadow duration-300 animate-fade-in-up" style={{ animationDelay: `${i * 0.1}s` }}>
-                  <div className="w-14 h-14 rounded-2xl bg-navy-100 dark:bg-navy-700 flex items-center justify-center mx-auto mb-4">
-                    <role.Icon className="w-6 h-6 text-navy-600 dark:text-navy-300" strokeWidth={1.75} />
-                  </div>
+                  <div className="w-14 h-14 rounded-2xl bg-navy-100 dark:bg-navy-700 flex items-center justify-center mx-auto mb-4"><role.Icon className="w-6 h-6 text-navy-600 dark:text-navy-300" strokeWidth={1.75} /></div>
                   <h3 className="font-display font-semibold text-lg text-navy-800 dark:text-white mb-2">{role.label}</h3>
                   <p className="text-sm text-ink-500 dark:text-ink-400">{role.desc}</p>
                 </div>
@@ -201,9 +212,7 @@ export default function LandingPage() {
             <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
               {featureItems.map((feature, i) => (
                 <div key={i} className={`group bg-white dark:bg-navy-800 border border-ink-200 dark:border-navy-600 rounded-2xl sm:rounded-3xl p-5 sm:p-6 md:p-8 shadow-card transition-all duration-300 hover:shadow-elevated hover:-translate-y-2 ${featuresVisible ? 'animate-fade-in-up' : 'opacity-0'}`} style={{ animationDelay: `${i * 0.2}s` }}>
-                  <div className="w-14 h-14 rounded-2xl bg-navy-100 dark:bg-navy-700 flex items-center justify-center mb-4 sm:mb-6 transform transition-transform group-hover:scale-110 duration-300">
-                    <feature.Icon className="w-7 h-7 text-navy-600 dark:text-navy-300" strokeWidth={1.75} />
-                  </div>
+                  <div className="w-14 h-14 rounded-2xl bg-navy-100 dark:bg-navy-700 flex items-center justify-center mb-4 sm:mb-6 transform transition-transform group-hover:scale-110 duration-300"><feature.Icon className="w-7 h-7 text-navy-600 dark:text-navy-300" strokeWidth={1.75} /></div>
                   <h3 className="text-lg sm:text-xl md:text-2xl font-display font-semibold text-navy-800 dark:text-white mb-3 sm:mb-4">{feature.title}</h3>
                   <p className="text-sm sm:text-base text-ink-500 dark:text-ink-400 leading-relaxed">{feature.desc}</p>
                 </div>
