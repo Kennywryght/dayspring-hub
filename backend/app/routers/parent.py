@@ -101,6 +101,7 @@ async def get_my_students(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# In parent.py - update get_student_quizzes
 @router.get("/quizzes/{student_id}/")
 async def get_student_quizzes(student_id: str, current_user: dict = Depends(get_current_user)):
     """Get available quizzes for a specific student"""
@@ -111,7 +112,8 @@ async def get_student_quizzes(student_id: str, current_user: dict = Depends(get_
         # Get parent record
         parent = await get_parent_record(current_user["user_id"])
         if not parent:
-            raise HTTPException(status_code=404, detail="Parent record not found")
+            logger.warning(f"Parent record not found for user: {current_user['user_id']}")
+            return []  # Return empty list instead of 404
         
         # Verify access
         has_access = await verify_parent_access(student_id, parent["id"])
@@ -126,7 +128,8 @@ async def get_student_quizzes(student_id: str, current_user: dict = Depends(get_
             .execute()
         
         if not student.data:
-            raise HTTPException(status_code=404, detail="Student not found")
+            logger.warning(f"Student not found: {student_id}")
+            return []  # Return empty list instead of 404
         
         # Get published quizzes for that class
         quizzes = supabase.table("quizzes") \
@@ -135,25 +138,30 @@ async def get_student_quizzes(student_id: str, current_user: dict = Depends(get_
             .eq("is_published", True) \
             .execute()
         
-        # Check which quizzes the student has submitted
-        for quiz in quizzes.data:
-            submissions = supabase.table("student_responses") \
-                .select("id") \
-                .eq("student_id", student_id) \
-                .eq("questions.quiz_id", quiz["id"]) \
-                .limit(1) \
-                .execute()
-            quiz["submitted"] = len(submissions.data) > 0
+        quiz_list = quizzes.data or []
         
-        return quizzes.data
+        # Check which quizzes the student has submitted
+        for quiz in quiz_list:
+            try:
+                submissions = supabase.table("student_responses") \
+                    .select("id") \
+                    .eq("student_id", student_id) \
+                    .eq("questions.quiz_id", quiz["id"]) \
+                    .limit(1) \
+                    .execute()
+                quiz["submitted"] = len(submissions.data) > 0
+            except Exception as e:
+                logger.warning(f"Error checking submission for quiz {quiz['id']}: {e}")
+                quiz["submitted"] = False
+        
+        return quiz_list
     
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error fetching student quizzes: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
+        return []  # Return empty list on error
+    
 @router.get("/quiz-result/{student_id}/{quiz_id}/")
 async def get_student_quiz_result(student_id: str, quiz_id: int, current_user: dict = Depends(get_current_user)):
     """Get quiz result for a specific student"""

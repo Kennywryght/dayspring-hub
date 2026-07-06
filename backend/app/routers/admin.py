@@ -2,9 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from app.database import supabase
+from datetime import datetime
 from app.utils.auth import get_current_user
 import bcrypt
 import logging
+
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +96,46 @@ async def delete_subject(subject_id: str, admin=Depends(require_admin)):
 async def update_subject(subject_id: str, name: str, admin=Depends(require_admin)):
     supabase.table("subjects").update({"name": name}).eq("id", subject_id).execute()
     return {"message": "Updated"}
+
+# ==================== SUBJECT SOFT DELETE ====================
+@router.delete("/subjects/{subject_id}/soft-delete/")
+async def soft_delete_subject(subject_id: str, admin=Depends(require_admin)):
+    """Soft delete a subject (mark as deleted)"""
+    try:
+        supabase.table("subjects").update({
+            "deleted": True,
+            "deleted_at": datetime.utcnow().isoformat()
+        }).eq("id", subject_id).execute()
+        return {"message": "Subject moved to trash"}
+    except Exception as e:
+        logger.error(f"Error soft deleting subject: {e}")
+        raise HTTPException(500, detail=str(e))
+
+@router.put("/subjects/{subject_id}/restore/")
+async def restore_subject(subject_id: str, admin=Depends(require_admin)):
+    """Restore a soft-deleted subject"""
+    try:
+        supabase.table("subjects").update({
+            "deleted": False,
+            "deleted_at": None
+        }).eq("id", subject_id).execute()
+        return {"message": "Subject restored"}
+    except Exception as e:
+        logger.error(f"Error restoring subject: {e}")
+        raise HTTPException(500, detail=str(e))
+
+@router.delete("/subjects/{subject_id}/permanent/")
+async def permanent_delete_subject(subject_id: str, admin=Depends(require_admin)):
+    """Permanently delete a subject"""
+    try:
+        # Remove from class_teachers first
+        supabase.table("class_teachers").delete().eq("subject_id", subject_id).execute()
+        # Delete the subject
+        supabase.table("subjects").delete().eq("id", subject_id).execute()
+        return {"message": "Subject permanently deleted"}
+    except Exception as e:
+        logger.error(f"Error permanently deleting subject: {e}")
+        raise HTTPException(500, detail=str(e))
 
 # ==================== TEACHERS ====================
 @router.get("/teachers/")

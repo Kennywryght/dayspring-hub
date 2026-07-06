@@ -56,40 +56,63 @@ def validate_password_strength(password: str) -> tuple:
     return len(errors) == 0, errors
 
 # --- Login Endpoint ---
+# In auth_student.py - replace the login endpoint
 @router.post("/login/")
 async def student_login(data: StudentLogin):
-    student_res = supabase.table("students").select("id, password_hash, display_name, class_id, grade, email").eq("student_number", data.student_number).execute()
-    if not student_res.data:
-        raise HTTPException(status_code=401, detail="Invalid student number or password")
-    student = student_res.data[0]
+    try:
+        logger.info(f"Login attempt for student: {data.student_number}")
+        
+        student_res = supabase.table("students").select("id, password_hash, display_name, class_id, grade, email").eq("student_number", data.student_number).execute()
+        
+        if not student_res.data:
+            logger.warning(f"Student not found: {data.student_number}")
+            raise HTTPException(status_code=401, detail="Invalid student number or password")
+        
+        student = student_res.data[0]
+        
+        # Check if password_hash exists
+        stored_hash = student.get("password_hash")
+        if not stored_hash:
+            logger.error(f"Student {data.student_number} has no password hash")
+            raise HTTPException(status_code=401, detail="Invalid student number or password")
+        
+        # Verify password
+        try:
+            stored_hash_bytes = stored_hash.encode('utf-8')
+            if not bcrypt.checkpw(data.password.encode('utf-8'), stored_hash_bytes):
+                logger.warning(f"Invalid password for student: {data.student_number}")
+                raise HTTPException(status_code=401, detail="Invalid student number or password")
+        except Exception as e:
+            logger.error(f"Password verification error: {e}")
+            raise HTTPException(status_code=401, detail="Invalid student number or password")
 
-    stored_hash = student["password_hash"].encode('utf-8')
-    if not bcrypt.checkpw(data.password.encode('utf-8'), stored_hash):
-        raise HTTPException(status_code=401, detail="Invalid student number or password")
-
-    payload = {
-        "sub": student["id"],
-        "role": "student",
-        "class_id": student["class_id"],
-        "display_name": student["display_name"],
-        "email": student.get("email"),
-        "exp": datetime.now(timezone.utc) + timedelta(hours=8)
-    }
-    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user": {
-            "id": student["id"],
+        payload = {
+            "sub": student["id"],
             "role": "student",
-            "display_name": student["display_name"],
-            "class_id": student["class_id"],
-            "grade": student.get("grade"),
-            "email": student.get("email")
+            "class_id": student.get("class_id"),
+            "display_name": student.get("display_name"),
+            "email": student.get("email"),
+            "exp": datetime.now(timezone.utc) + timedelta(hours=8)
         }
-    }
+        token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "user": {
+                "id": student["id"],
+                "role": "student",
+                "display_name": student.get("display_name"),
+                "class_id": student.get("class_id"),
+                "grade": student.get("grade"),
+                "email": student.get("email")
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Student login error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Login error: {str(e)}")
 # --- Password Reset Endpoints ---
 @router.post("/forgot-password")
 async def forgot_password(
