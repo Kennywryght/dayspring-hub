@@ -92,7 +92,7 @@ export default function Layout({ children, navLinks }) {
           <div className="flex items-center justify-between p-5">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded overflow-hidden border border-brass-500/40 flex-shrink-0 bg-white">
-                <img src="/logo.jpg" alt="Dayspring Hub" className="w-full h-full object-cover" />
+                <img src="/logo.jpeg" alt="Dayspring Hub" className="w-full h-full object-cover" />
               </div>
               <div className="leading-tight">
                 <p className="text-lg font-display font-semibold text-white tracking-tight">Dayspring</p>

@@ -18,40 +18,67 @@ function ProtectedRoute({ children, allowedRoles }) {
   return children;
 }
 
+function AppRoutes() {
+  const { user, loading } = useAuth();
+  
+  if (loading) return <div>Loading...</div>;
+  
+  return (
+    <Routes>
+      {/* Root path - redirect based on auth status */}
+      <Route 
+        path="/" 
+        element={
+          user ? (
+            // Redirect based on role
+            user.role === 'super_admin' ? <Navigate to="/admin" /> :
+            user.role === 'teacher' ? <Navigate to="/teacher" /> :
+            user.role === 'student' ? <Navigate to="/student" /> :
+            user.role === 'parent' ? <Navigate to="/parent" /> :
+            <Navigate to="/login" />
+          ) : (
+            <Navigate to="/login" />
+          )
+        } 
+      />
+      
+      {/* Auth routes */}
+      <Route path="/login" element={<UnifiedLogin />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      
+      {/* Protected routes */}
+      <Route path="/student" element={
+        <ProtectedRoute allowedRoles={['student']}>
+          <StudentDashboard />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/teacher" element={
+        <ProtectedRoute allowedRoles={['teacher']}>
+          <TeacherDashboard />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/parent" element={
+        <ProtectedRoute allowedRoles={['parent']}>
+          <ParentDashboard />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/admin" element={
+        <ProtectedRoute allowedRoles={['super_admin']}>
+          <AdminDashboard />
+        </ProtectedRoute>
+      } />
+    </Routes>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<UnifiedLogin />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          
-          <Route path="/student" element={
-            <ProtectedRoute allowedRoles={['student']}>
-              <StudentDashboard />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/teacher" element={
-            <ProtectedRoute allowedRoles={['teacher']}>
-              <TeacherDashboard />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/parent" element={
-            <ProtectedRoute allowedRoles={['parent']}>
-              <ParentDashboard />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/admin" element={
-            <ProtectedRoute allowedRoles={['super_admin']}>
-              <AdminDashboard />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/" element={<Navigate to="/login" />} />
-        </Routes>
+        <AppRoutes />
       </AuthProvider>
     </BrowserRouter>
   );

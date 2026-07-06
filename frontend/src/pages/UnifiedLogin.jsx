@@ -294,7 +294,7 @@ export default function UnifiedLogin() {
         <div className="w-full max-w-lg">
           <div className="text-center mb-10">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white dark:bg-navy-800 shadow-card border border-brass-500/30 mb-5">
-              <img src="/logo.jpg" alt="Dayspring Hub" className="w-11 h-11 rounded-xl object-cover" />
+              <img src="/logo.jpeg" alt="Dayspring Hub" className="w-11 h-11 rounded-xl object-cover" />
             </div>
             <h1 className="text-3xl font-display font-semibold text-navy-800 dark:text-white">
               Dayspring <span className="text-brass-500">Hub</span>

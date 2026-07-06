@@ -27,15 +27,33 @@ export default function ResetPassword() {
 
   const validateToken = async () => {
     try {
-      const response = await fetch(`${API_URL}auth/validate-reset-token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
-      });
+      // Try all role-specific validation endpoints
+      const roles = ['teacher', 'student', 'parent', 'admin'];
+      let valid = false;
       
-      const data = await response.json();
-      setTokenValid(data.valid || false);
-      if (!data.valid) {
+      for (const role of roles) {
+        try {
+          const response = await fetch(`${API_URL}auth/${role}/validate-reset-token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.valid) {
+              valid = true;
+              break;
+            }
+          }
+        } catch (e) {
+          // Continue to next role
+          continue;
+        }
+      }
+      
+      setTokenValid(valid);
+      if (!valid) {
         setError('This reset link is invalid or has expired');
       }
     } catch (err) {
@@ -62,21 +80,36 @@ export default function ResetPassword() {
     setError('');
     
     try {
-      const response = await fetch(`${API_URL}auth/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          token: token, 
-          new_password: password 
-        })
-      });
+      // Try all role-specific reset endpoints
+      const roles = ['teacher', 'student', 'parent', 'admin'];
+      let success = false;
       
-      if (response.ok) {
+      for (const role of roles) {
+        try {
+          const response = await fetch(`${API_URL}auth/${role}/reset-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              token: token, 
+              new_password: password 
+            })
+          });
+          
+          if (response.ok) {
+            success = true;
+            break;
+          }
+        } catch (e) {
+          // Continue to next role
+          continue;
+        }
+      }
+      
+      if (success) {
         setSuccess(true);
         setTimeout(() => navigate('/login'), 3000);
       } else {
-        const data = await response.json();
-        setError(data.detail || 'Failed to reset password');
+        setError('Failed to reset password. Please request a new link.');
       }
     } catch (err) {
       setError('Network error. Please try again.');
@@ -131,6 +164,9 @@ export default function ResetPassword() {
     <div className="min-h-screen flex items-center justify-center bg-parchment dark:bg-navy-900 p-4">
       <div className="w-full max-w-md bg-white dark:bg-navy-800 rounded-3xl shadow-elevated p-8">
         <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-full bg-brass-100 dark:bg-brass-700/20 flex items-center justify-center mx-auto mb-4">
+            <img src="/logo.jpeg" alt="Dayspring Hub" className="w-12 h-12 rounded-full object-cover" />
+          </div>
           <h1 className="text-2xl font-display font-semibold text-navy-800 dark:text-white">
             Create New Password
           </h1>
