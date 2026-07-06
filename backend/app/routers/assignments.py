@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from typing import Optional
 from app.database import supabase
 from app.utils.auth import get_current_user
+from app.redis_config import cache_response, invalidate_cache, invalidate_all_assignments
 import uuid
 
 router = APIRouter(prefix="/assignments", tags=["Assignments"])
@@ -14,7 +15,7 @@ async def create_assignment(
     audio: Optional[UploadFile] = File(None),
     deadline: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
-    class_id: Optional[str] = Form(None),   # required for teacher
+    class_id: Optional[str] = Form(None),
     current_user: dict = Depends(get_current_user)
 ):
     if current_user["role"] != "teacher":
@@ -24,6 +25,10 @@ async def create_assignment(
         raise HTTPException(status_code=400, detail="class_id is required")
     if class_id not in current_user.get("class_ids", []):
         raise HTTPException(status_code=403, detail="You are not assigned to this class")
+
+    # Invalidate caches
+    invalidate_all_assignments()
+    invalidate_cache(f"assignments:class_{class_id}*")
 
     file_url = None
     if file:
@@ -52,7 +57,7 @@ async def create_assignment(
             )
             audio_url = supabase.storage.from_("learning-materials").get_public_url(audio_filename)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Audio upload failed: {str(e)}")
 
     insert_data = {
         "title": title,
@@ -70,6 +75,7 @@ async def create_assignment(
     raise HTTPException(status_code=500, detail="Failed to create assignment")
 
 @router.get("/")
+@cache_response(ttl=300, key_prefix="assignments", class_specific=True)
 async def list_assignments(
     class_id: Optional[str] = None,
     student_id: Optional[str] = None,
@@ -105,8 +111,14 @@ async def list_assignments(
 async def delete_assignment(assignment_id: str, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can delete")
-    ass = supabase.table("assignments").select("*").eq("id", assignment_id).single().execute()
-    if not ass.data or ass.data["teacher_id"] != current_user["user_id"]:
+    ass = supabase.table("assignments").select("class_id").eq("id", assignment_id).single().execute()
+    if not ass.data or ass.data.get("teacher_id") != current_user["user_id"]:
         raise HTTPException(status_code=403, detail="Not your assignment")
+    
+    # Invalidate caches
+    invalidate_all_assignments()
+    if ass.data.get("class_id"):
+        invalidate_cache(f"assignments:class_{ass.data['class_id']}*")
+    
     supabase.table("assignments").delete().eq("id", assignment_id).execute()
     return {"message": "Deleted"}

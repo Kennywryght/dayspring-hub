@@ -1,42 +1,59 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
-import { ThemeProvider } from './context/ThemeContext';
-import { NotificationProvider } from './context/NotificationContext';   // new
-
-import LandingPage from './pages/LandingPage';
 import UnifiedLogin from './pages/UnifiedLogin';
-import TeacherDashboard from './pages/TeacherDashboard';
+import ResetPassword from './pages/ResetPassword';
 import StudentDashboard from './pages/StudentDashboard';
+import TeacherDashboard from './pages/TeacherDashboard';
 import ParentDashboard from './pages/ParentDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import { AuthProvider, useAuth } from './context/AuthContext';
+
+function ProtectedRoute({ children, allowedRoles }) {
+  const { user, loading } = useAuth();
+  
+  if (loading) return <div>Loading...</div>;
+  if (!user) return <Navigate to="/login" />;
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/" />;
+  }
+  return children;
+}
 
 function App() {
   return (
-    <AuthProvider>
-      <ThemeProvider>
-        <NotificationProvider>
-          <BrowserRouter>
-            <Routes>
-              {/* Legacy redirects */}
-              <Route path="/login/teacher" element={<Navigate to="/login" />} />
-              <Route path="/login/student" element={<Navigate to="/login" />} />
-              <Route path="/login/parent" element={<Navigate to="/login" />} />
-              <Route path="/teacher/login" element={<Navigate to="/login" />} />
-              <Route path="/student/login" element={<Navigate to="/login" />} />
-              <Route path="/parent/login" element={<Navigate to="/login" />} />
-
-              {/* Current routes */}
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/login" element={<UnifiedLogin />} />
-              <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
-              <Route path="/student/dashboard" element={<StudentDashboard />} />
-              <Route path="/parent/dashboard" element={<ParentDashboard />} />
-              <Route path="/admin/dashboard" element={<AdminDashboard />} />
-            </Routes>
-          </BrowserRouter>
-        </NotificationProvider>
-      </ThemeProvider>
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<UnifiedLogin />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          
+          <Route path="/student" element={
+            <ProtectedRoute allowedRoles={['student']}>
+              <StudentDashboard />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/teacher" element={
+            <ProtectedRoute allowedRoles={['teacher']}>
+              <TeacherDashboard />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/parent" element={
+            <ProtectedRoute allowedRoles={['parent']}>
+              <ParentDashboard />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/admin" element={
+            <ProtectedRoute allowedRoles={['super_admin']}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/" element={<Navigate to="/login" />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
 

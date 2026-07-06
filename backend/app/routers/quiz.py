@@ -1,12 +1,13 @@
 # app/routers/quiz.py
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from app.database import supabase
 from app.utils.auth import get_current_user
 from typing import Optional, List
 from pydantic import BaseModel
-from fastapi.responses import Response
 import logging
+from datetime import datetime
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,9 @@ async def create_quiz(quiz_data: QuizCreate, user=Depends(get_current_user)):
         "class_id": quiz_data.class_id,
         "title": quiz_data.title,
         "description": quiz_data.description,
+        "is_published": False,
+        "auto_graded": False,
+        "created_at": datetime.utcnow().isoformat(),
     }
     res_quiz = supabase.table("quizzes").insert(quiz_insert).execute()
     quiz_row = res_quiz.data[0]
@@ -102,6 +106,7 @@ async def create_quiz(quiz_data: QuizCreate, user=Depends(get_current_user)):
             "question_text": q.question_text,
             "question_type": q.question_type,
             "order": q.order,
+            "points": 5,  # Default points per question
         }
         res_q = supabase.table("questions").insert(question_insert).execute()
         question_id = res_q.data[0]["id"]
@@ -222,6 +227,8 @@ async def get_submission_answers(submission_id: str, user=Depends(get_current_us
     except Exception as e:
         logger.error(f"Error fetching answers: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.put("/submissions/{submission_id}/grade")
 async def grade_submission(submission_id: str, payload: GradePayload, user=Depends(get_current_user)):
     """Teacher: Grade a student's quiz answers (also works for re-grading)"""
@@ -234,6 +241,11 @@ async def grade_submission(submission_id: str, payload: GradePayload, user=Depen
             
             if grade.points is not None:
                 update_data["points"] = float(grade.points)
+                # If points are assigned, set is_correct based on points > 0
+                if float(grade.points) > 0:
+                    update_data["is_correct"] = True
+                else:
+                    update_data["is_correct"] = False
             
             if grade.feedback is not None:
                 update_data["feedback"] = grade.feedback
@@ -378,101 +390,6 @@ async def get_quiz_results(quiz_id: int, user=Depends(get_current_user)):
         raise
     except Exception as e:
         logger.error(f"Error fetching quiz results: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/{quiz_id}/my-result")
-async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
-    """Student: Get my result for a specific quiz"""
-    if user["role"] != "student":
-        raise HTTPException(status_code=403, detail="Only students can view results")
-    
-    try:
-        student_db_id = await get_student_db_id(user)
-        logger.info(f"Fetching result for student {student_db_id}, quiz {quiz_id}")
-        
-        # Get quiz info
-        quiz = supabase.table("quizzes") \
-            .select("id, title") \
-            .eq("id", quiz_id) \
-            .single() \
-            .execute()
-        
-        if not quiz.data:
-            raise HTTPException(status_code=404, detail="Quiz not found")
-        
-        # Get questions for this quiz
-        questions = supabase.table("questions") \
-            .select("id, question_text, question_type, order") \
-            .eq("quiz_id", quiz_id) \
-            .order("order") \
-            .execute()
-        
-        total_questions = len(questions.data)
-        
-        # FIXED: Don't use .order() on student_responses - it doesn't have that column
-        # Instead, get responses and sort manually by question order
-        responses = supabase.table("student_responses") \
-            .select("*, questions!inner(quiz_id, question_text, question_type, order)") \
-            .eq("student_id", student_db_id) \
-            .eq("questions.quiz_id", quiz_id) \
-            .execute()
-        
-        logger.info(f"Found {len(responses.data)} responses for student {student_db_id}, quiz {quiz_id}")
-        
-        if not responses.data:
-            return {
-                "quiz_title": quiz.data["title"],
-                "submitted": False,
-                "total_points": 0,
-                "total_possible": total_questions * 5,
-                "graded_count": 0,
-                "total_questions": total_questions,
-                "answers": [],
-            }
-        
-        # Sort responses by question order manually
-        sorted_responses = sorted(
-            responses.data, 
-            key=lambda r: r.get("questions", {}).get("order", 0)
-        )
-        
-        total_points = 0
-        graded_count = 0
-        answers = []
-        
-        for r in sorted_responses:
-            q_data = r.get("questions", {})
-            answer_data = {
-                "question_id": r["question_id"],
-                "question_text": q_data.get("question_text", ""),
-                "question_type": q_data.get("question_type", ""),
-                "points": r.get("points"),
-                "feedback": r.get("feedback"),
-                "text_answer": r.get("text_answer"),
-                "selected_option_id": r.get("selected_option_id"),
-            }
-            answers.append(answer_data)
-            
-            if r.get("points") is not None:
-                total_points += float(r["points"])
-                graded_count += 1
-        
-        result = {
-            "quiz_title": quiz.data["title"],
-            "submitted": True,
-            "total_points": total_points,
-            "total_possible": total_questions * 5,
-            "graded_count": graded_count,
-            "total_questions": total_questions,
-            "answers": answers,
-        }
-        
-        logger.info(f"Returning result: {result['total_points']}/{result['total_possible']}")
-        return result
-    
-    except Exception as e:
-        logger.error(f"Error fetching student result: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -629,30 +546,57 @@ async def delete_quiz(quiz_id: int, user=Depends(get_current_user)):
 
     return {"detail": "Quiz deleted successfully"}
 
+
 @router.post("/{quiz_id}/auto-grade")
 async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can auto-grade")
     
-    questions = supabase.table("questions").select("id, question_type, points").eq("quiz_id", quiz_id).execute()
+    try:
+        # Get all questions for this quiz
+        questions = supabase.table("questions") \
+            .select("id, question_type, points") \
+            .eq("quiz_id", quiz_id) \
+            .execute()
+        
+        graded_count = 0
+        
+        for q in questions.data:
+            if q["question_type"] == "multiple_choice":
+                # Get the correct option
+                correct = supabase.table("options") \
+                    .select("id") \
+                    .eq("question_id", q["id"]) \
+                    .eq("is_correct", True) \
+                    .single() \
+                    .execute()
+                
+                if correct.data:
+                    pts = float(q.get("points") or 5)
+                    # Get all student responses for this question
+                    responses = supabase.table("student_responses") \
+                        .select("id, selected_option_id") \
+                        .eq("question_id", q["id"]) \
+                        .execute()
+                    
+                    for r in responses.data:
+                        is_correct = r["selected_option_id"] == correct.data["id"]
+                        supabase.table("student_responses").update({
+                            "points": pts if is_correct else 0,
+                            "is_correct": is_correct
+                        }).eq("id", r["id"]).execute()
+                        graded_count += 1
+        
+        # Mark quiz as auto-graded
+        supabase.table("quizzes").update({"auto_graded": True}).eq("id", quiz_id).execute()
+        
+        return {"message": f"Quiz auto-graded successfully. {graded_count} responses graded."}
     
-    for q in questions.data:
-        if q["question_type"] == "multiple_choice":
-            correct = supabase.table("options").select("id").eq("question_id", q["id"]).eq("is_correct", True).single().execute()
-            if correct.data:
-                pts = float(q.get("points") or 5)
-                responses = supabase.table("student_responses").select("id, selected_option_id").eq("question_id", q["id"]).execute()
-                for r in responses.data:
-                    is_correct = r["selected_option_id"] == correct.data["id"]
-                    supabase.table("student_responses").update({
-                        "points": pts if is_correct else 0,
-                        "is_correct": is_correct
-                    }).eq("id", r["id"]).execute()
-    
-    # Mark quiz as auto-graded
-    supabase.table("quizzes").update({"auto_graded": True}).eq("id", quiz_id).execute()
-    
-    return {"message": "Quiz auto-graded successfully"}
+    except Exception as e:
+        logger.error(f"Error in auto-grade: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{quiz_id}/my-result")
 async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
     """Student: Get my result for a specific quiz with correct answers"""
@@ -661,22 +605,54 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
     
     try:
         student_db_id = await get_student_db_id(user)
+        logger.info(f"Fetching result for student {student_db_id}, quiz {quiz_id}")
         
         # Get quiz info
-        quiz = supabase.table("quizzes").select("id, title, auto_graded").eq("id", quiz_id).single().execute()
+        quiz = supabase.table("quizzes") \
+            .select("id, title, auto_graded") \
+            .eq("id", quiz_id) \
+            .single() \
+            .execute()
+        
         if not quiz.data:
             raise HTTPException(status_code=404, detail="Quiz not found")
         
-        questions = supabase.table("questions").select("id, question_text, question_type, points, order").eq("quiz_id", quiz_id).order("order").execute()
+        # Get questions for this quiz
+        questions = supabase.table("questions") \
+            .select("id, question_text, question_type, points, order") \
+            .eq("quiz_id", quiz_id) \
+            .order("order") \
+            .execute()
+        
         total_questions = len(questions.data)
+        total_possible = total_questions * 5  # Each question worth 5 points
         
         # Get student responses
-        responses = supabase.table("student_responses").select("*, questions!inner(quiz_id, question_text, question_type, order, points)").eq("student_id", student_db_id).eq("questions.quiz_id", quiz_id).execute()
+        responses = supabase.table("student_responses") \
+            .select("*, questions!inner(quiz_id, question_text, question_type, order, points)") \
+            .eq("student_id", student_db_id) \
+            .eq("questions.quiz_id", quiz_id) \
+            .execute()
+        
+        logger.info(f"Found {len(responses.data)} responses for student {student_db_id}, quiz {quiz_id}")
         
         if not responses.data:
-            return {"quiz_title": quiz.data["title"], "submitted": False, "total_points": 0, "total_possible": total_questions * 5, "graded_count": 0, "total_questions": total_questions, "auto_graded": quiz.data.get("auto_graded", False), "answers": []}
+            return {
+                "quiz_title": quiz.data["title"],
+                "submitted": False,
+                "total_points": 0,
+                "total_possible": total_possible,
+                "graded_count": 0,
+                "total_questions": total_questions,
+                "auto_graded": quiz.data.get("auto_graded", False),
+                "answers": [],
+            }
         
-        sorted_responses = sorted(responses.data, key=lambda r: r.get("questions", {}).get("order", 0))
+        # Sort responses by question order manually
+        sorted_responses = sorted(
+            responses.data, 
+            key=lambda r: r.get("questions", {}).get("order", 0)
+        )
         
         total_points = 0
         graded_count = 0
@@ -697,13 +673,22 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
             
             # If multiple choice, get option text and correct answer
             if r.get("selected_option_id"):
-                option = supabase.table("options").select("option_text").eq("id", r["selected_option_id"]).single().execute()
+                option = supabase.table("options") \
+                    .select("option_text") \
+                    .eq("id", r["selected_option_id"]) \
+                    .single() \
+                    .execute()
                 if option.data:
                     answer_data["selected_option_text"] = option.data["option_text"]
                 
                 # Get correct answer for this question
                 if q_data.get("question_type") == "multiple_choice":
-                    correct_opt = supabase.table("options").select("option_text").eq("question_id", r["question_id"]).eq("is_correct", True).single().execute()
+                    correct_opt = supabase.table("options") \
+                        .select("option_text") \
+                        .eq("question_id", r["question_id"]) \
+                        .eq("is_correct", True) \
+                        .single() \
+                        .execute()
                     if correct_opt.data:
                         answer_data["correct_answer"] = correct_opt.data["option_text"]
             
@@ -712,53 +697,148 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
                 total_points += float(r["points"])
                 graded_count += 1
         
-        return {
+        result = {
             "quiz_title": quiz.data["title"],
             "submitted": True,
             "total_points": total_points,
-            "total_possible": total_questions * 5,
+            "total_possible": total_possible,
             "graded_count": graded_count,
             "total_questions": total_questions,
             "auto_graded": quiz.data.get("auto_graded", False),
             "answers": answers,
         }
+        
+        logger.info(f"Returning result: {result['total_points']}/{result['total_possible']}")
+        return result
+    
     except Exception as e:
         logger.error(f"Error fetching student result: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
 @router.get("/{quiz_id}/export-result")
 async def export_quiz_result(quiz_id: int, user=Depends(get_current_user)):
     """Export student's quiz result as PDF"""
     if user["role"] != "student":
         raise HTTPException(status_code=403, detail="Only students can export results")
     
-    # Get the result using the existing function
-    result = await get_my_quiz_result(quiz_id, user)
-    
-    # Generate a simple text/HTML report
-    html = f"""
-    <html><head><title>Quiz Results - {result['quiz_title']}</title>
-    <style>body{{font-family:Arial;padding:20px}}h1{{color:#1a365d}}.correct{{color:#166534}}.incorrect{{color:#991b1b}}.score{{font-size:24px;font-weight:bold}}</style>
-    </head><body>
-    <h1>{result['quiz_title']}</h1>
-    <p class="score">Score: {result['total_points']}/{result['total_possible']} ({round((result['total_points']/result['total_possible'])*100) if result['total_possible']>0 else 0}%)</p>
-    <p>Graded: {result['graded_count']}/{result['total_questions']} questions</p>
-    <hr>
-    """
-    
-    for i, ans in enumerate(result.get("answers", [])):
-        status = "✓ Correct" if ans.get("is_correct") else ("✗ Incorrect" if ans.get("is_correct") is False else "Not graded")
-        color = "correct" if ans.get("is_correct") else ("incorrect" if ans.get("is_correct") is False else "")
-        html += f"""
-        <div class="{color}">
-            <p><strong>Q{i+1}: {ans['question_text']}</strong></p>
-            <p>Your answer: {ans.get('selected_option_text') or ans.get('text_answer') or 'No answer'}</p>
-            {f"<p>Correct answer: {ans.get('correct_answer')}</p>" if ans.get('correct_answer') else ""}
-            <p>Points: {ans.get('points', 'N/A')} | Status: {status}</p>
-            {f"<p>Feedback: {ans['feedback']}</p>" if ans.get('feedback') else ""}
-        </div><hr>
+    try:
+        # Get the result using the existing function
+        result = await get_my_quiz_result(quiz_id, user)
+        
+        if not result.get("submitted"):
+            raise HTTPException(status_code=400, detail="You haven't submitted this quiz yet")
+        
+        # Generate HTML report
+        total_possible = result.get("total_possible", 1)
+        percentage = round((result.get("total_points", 0) / total_possible) * 100) if total_possible > 0 else 0
+        
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Quiz Results - {result['quiz_title']}</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }}
+                h1 {{ color: #1a365d; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }}
+                .header {{ background: #f7fafc; padding: 20px; border-radius: 8px; margin-bottom: 20px; }}
+                .score {{ font-size: 28px; font-weight: bold; color: #2d3748; }}
+                .correct {{ color: #166534; }}
+                .incorrect {{ color: #991b1b; }}
+                .question {{ background: #f7fafc; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid #4299e1; }}
+                .question.correct {{ border-left-color: #48bb78; background: #f0fff4; }}
+                .question.incorrect {{ border-left-color: #fc8181; background: #fff5f5; }}
+                .question.unanswered {{ border-left-color: #ecc94b; }}
+                .meta {{ color: #4a5568; font-size: 14px; }}
+                .points {{ font-weight: bold; }}
+                .status-badge {{ display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }}
+                .status-correct {{ background: #c6f6d5; color: #22543d; }}
+                .status-incorrect {{ background: #fed7d7; color: #742a2a; }}
+                .status-pending {{ background: #fefcbf; color: #744210; }}
+                .footer {{ margin-top: 30px; font-size: 12px; color: #a0aec0; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 20px; }}
+                .answer-text {{ background: white; padding: 8px 12px; border-radius: 4px; border: 1px solid #e2e8f0; margin: 5px 0; }}
+            </style>
+        </head>
+        <body>
+            <h1>📝 Quiz Results: {result['quiz_title']}</h1>
+            
+            <div class="header">
+                <div class="score">Score: {result['total_points']} / {result['total_possible']} ({percentage}%)</div>
+                <div class="meta">
+                    <p>📊 Questions graded: {result['graded_count']} / {result['total_questions']}</p>
+                    <p>🤖 Auto-graded: {'Yes' if result.get('auto_graded') else 'No'}</p>
+                    <p>📅 Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}</p>
+                </div>
+            </div>
+            
+            <h2>Question Breakdown</h2>
         """
+        
+        for i, ans in enumerate(result.get("answers", [])):
+            # Determine status
+            if ans.get("is_correct") is True:
+                status_class = "correct"
+                status_text = "✅ Correct"
+                status_badge = "status-correct"
+            elif ans.get("is_correct") is False:
+                status_class = "incorrect"
+                status_text = "❌ Incorrect"
+                status_badge = "status-incorrect"
+            else:
+                status_class = "unanswered"
+                status_text = "⏳ Not graded"
+                status_badge = "status-pending"
+            
+            points_display = ans.get('points') if ans.get('points') is not None else 'N/A'
+            
+            html += f"""
+            <div class="question {status_class}">
+                <p><strong>Q{i+1}: {ans['question_text']}</strong></p>
+                <p><strong>Type:</strong> {ans['question_type'].replace('_', ' ').title()}</p>
+                <p><strong>Your answer:</strong> 
+                    <span class="answer-text">{ans.get('selected_option_text') or ans.get('text_answer') or 'No answer provided'}</span>
+                </p>
+            """
+            
+            if ans.get('correct_answer'):
+                html += f"""
+                <p><strong>Correct answer:</strong> 
+                    <span class="answer-text" style="background:#f0fff4;">{ans['correct_answer']}</span>
+                </p>
+                """
+            
+            html += f"""
+                <p><strong>Points:</strong> <span class="points">{points_display}</span></p>
+                <p><span class="status-badge {status_badge}">{status_text}</span></p>
+            """
+            
+            if ans.get('feedback'):
+                html += f"""
+                <p><strong>Feedback:</strong> {ans['feedback']}</p>
+                """
+            
+            html += "</div>"
+        
+        html += """
+            <div class="footer">
+                <p>Generated by Dayspring Hub Learning Platform</p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Return HTML response with proper headers
+        return Response(
+            content=html,
+            media_type="text/html",
+            headers={
+                "Content-Disposition": f"attachment; filename=quiz_results_{quiz_id}.html",
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
     
-    html += "</body></html>"
-    
-    return Response(content=html, media_type="text/html", headers={"Content-Disposition": f"attachment; filename=quiz_{quiz_id}_result.html"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating quiz results: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

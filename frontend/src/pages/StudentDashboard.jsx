@@ -52,6 +52,7 @@ export default function StudentDashboard() {
   const [quizQuestions, setQuizQuestions] = useState([]);
   const [responses, setResponses] = useState({});
   const [loadingQuiz, setLoadingQuiz] = useState(false);
+  const [loadingQuizId, setLoadingQuizId] = useState(null);
   const [submittingQuiz, setSubmittingQuiz] = useState(false);
 
   // Quiz results state
@@ -137,9 +138,13 @@ export default function StudentDashboard() {
     }
   };
 
+  // FIXED: startQuiz function - properly loads only the selected quiz
   const startQuiz = async (quizId) => {
+    setLoadingQuizId(quizId);
     setLoadingQuiz(true);
     try {
+      console.log('Starting quiz with ID:', quizId);
+      
       const res = await fetch(`${API_URL}quizzes/${quizId}/take`, {
         headers: { 
           Authorization: `Bearer ${user.access_token}`,
@@ -149,40 +154,53 @@ export default function StudentDashboard() {
       
       if (res.ok) {
         const data = await res.json();
+        console.log('Quiz data received:', data);
         
-        // Handle the response structure - get quiz and questions
-        const quiz = data.quiz || data;
-        const questions = data.questions || [];
+        // Handle different response structures
+        let quizData = data.quiz || data;
+        let questionsData = data.questions || [];
         
-        if (!quiz || !quiz.id) {
+        // If the response has questions nested differently
+        if (data.data) {
+          quizData = data.data.quiz || data.data;
+          questionsData = data.data.questions || [];
+        }
+        
+        // Ensure we have quiz data
+        if (!quizData || !quizData.id) {
           showMsg('Invalid quiz data received', 'error');
+          setLoadingQuizId(null);
           setLoadingQuiz(false);
           return;
         }
         
-        if (!questions || questions.length === 0) {
+        // Ensure we have questions
+        if (!questionsData || questionsData.length === 0) {
           showMsg('This quiz has no questions.', 'error');
+          setLoadingQuizId(null);
           setLoadingQuiz(false);
           return;
         }
         
-        // Set the active quiz and questions
-        setActiveQuiz(quiz);
-        setQuizQuestions(questions);
+        // Set the active quiz - this will cause the conditional render to show the quiz interface
+        setActiveQuiz(quizData);
+        setQuizQuestions(questionsData);
         setResponses({});
         
-        // Switch to the quizzes tab to show the quiz interface
+        // Switch to quizzes tab to show the quiz interface
         setTab('quizzes');
         
-        showMsg('Quiz loaded! Answer all questions and submit.', 'success');
+        showMsg(`Quiz "${quizData.title}" loaded! Answer all questions and submit.`, 'success');
       } else {
         const errorData = await res.json().catch(() => ({}));
+        console.error('Failed to load quiz:', errorData);
         showMsg(errorData.detail || 'Failed to load quiz. Please try again.', 'error');
       }
     } catch (err) {
       console.error('Error starting quiz:', err);
       showMsg('Network error. Please check your connection.', 'error');
     } finally {
+      setLoadingQuizId(null);
       setLoadingQuiz(false);
     }
   };
@@ -258,28 +276,95 @@ export default function StudentDashboard() {
     }
   };
 
+  // FIXED: downloadQuizResults function - properly handles PDF download
   const downloadQuizResults = async (quizId) => {
     setExportingResults(true);
     try {
-      const res = await fetch(`${API_URL}quizzes/${quizId}/export-result`, {
-        headers: { Authorization: `Bearer ${user.access_token}` }
+      const response = await fetch(`${API_URL}quizzes/${quizId}/export-result`, {
+        headers: { 
+          Authorization: `Bearer ${user.access_token}`,
+          'Accept': 'application/pdf',
+        }
       });
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `quiz_results_${quizId}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-        showMsg('Results downloaded successfully!');
-      } else {
-        showMsg('Failed to download results', 'error');
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        showMsg(error.detail || 'Failed to download results', 'error');
+        setExportingResults(false);
+        return;
       }
+      
+      // Get the blob from response
+      const blob = await response.blob();
+      
+      // Check if it's actually a PDF
+      if (!blob.type.includes('pdf')) {
+        showMsg('The server returned an unexpected file type', 'error');
+        setExportingResults(false);
+        return;
+      }
+      
+      // Create a URL for the blob
+      const url = window.URL.createObjectURL(blob);
+      
+      // Create a link element
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `quiz_results_${quizId}.pdf`;
+      link.target = '_blank';
+      
+      // Append to body, click, and remove
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up after a delay
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      
+      showMsg('Results downloaded successfully!', 'success');
+      
     } catch (err) {
-      showMsg('Failed to download results', 'error');
+      console.error('Download error:', err);
+      showMsg('Failed to download results. Please try again.', 'error');
+    } finally {
+      setExportingResults(false);
+    }
+  };
+
+  // Alternative: view PDF in new tab
+  const viewQuizResults = async (quizId) => {
+    setExportingResults(true);
+    try {
+      const response = await fetch(`${API_URL}quizzes/${quizId}/export-result`, {
+        headers: { 
+          Authorization: `Bearer ${user.access_token}`,
+          'Accept': 'application/pdf',
+        }
+      });
+      
+      if (!response.ok) {
+        showMsg('Failed to load results', 'error');
+        setExportingResults(false);
+        return;
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      
+      // Open in new tab
+      window.open(url, '_blank');
+      
+      // Clean up after a delay
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 1000);
+      
+      showMsg('Results opened in new tab', 'success');
+    } catch (err) {
+      console.error('View error:', err);
+      showMsg('Failed to view results', 'error');
     } finally {
       setExportingResults(false);
     }
@@ -767,11 +852,11 @@ export default function StudentDashboard() {
                         ) : (
                           <button 
                             onClick={() => startQuiz(quiz.id)}
-                            disabled={loadingQuiz}
+                            disabled={loadingQuizId === quiz.id}
                             className="bg-brass-600 hover:bg-brass-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                           >
-                            {loadingQuiz ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                            {loadingQuiz ? 'Loading...' : 'Take Quiz'}
+                            {loadingQuizId === quiz.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" strokeWidth={1.75} />}
+                            {loadingQuizId === quiz.id ? 'Loading...' : 'Take Quiz'}
                           </button>
                         )}
                       </div>
@@ -1015,13 +1100,22 @@ export default function StudentDashboard() {
                                 className="w-full bg-brass-50 dark:bg-brass-700/20 text-brass-700 dark:text-brass-400 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-brass-100 dark:hover:bg-brass-700/30 transition-colors">
                                 View Details
                               </button>
-                              <button 
-                                onClick={() => downloadQuizResults(quiz.id)}
-                                disabled={exportingResults}
-                                className="w-full bg-forest-50 dark:bg-forest-700/20 text-forest-700 dark:text-forest-400 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-forest-100 dark:hover:bg-forest-700/30 transition-colors flex items-center justify-center gap-2">
-                                <Download className="w-3.5 h-3.5" strokeWidth={1.75} />
-                                {exportingResults ? 'Downloading...' : 'Download Results'}
-                              </button>
+                              <div className="flex gap-2">
+                                <button 
+                                  onClick={() => downloadQuizResults(quiz.id)}
+                                  disabled={exportingResults}
+                                  className="flex-1 bg-forest-50 dark:bg-forest-700/20 text-forest-700 dark:text-forest-400 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-forest-100 dark:hover:bg-forest-700/30 transition-colors flex items-center justify-center gap-2">
+                                  <Download className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                  {exportingResults ? 'Downloading...' : 'Download'}
+                                </button>
+                                <button 
+                                  onClick={() => viewQuizResults(quiz.id)}
+                                  disabled={exportingResults}
+                                  className="flex-1 bg-navy-50 dark:bg-navy-700 text-navy-700 dark:text-ink-200 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-navy-100 dark:hover:bg-navy-600 transition-colors flex items-center justify-center gap-2">
+                                  <Eye className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                  View PDF
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ) : (
@@ -1034,11 +1128,15 @@ export default function StudentDashboard() {
                     ) : (
                       <button 
                         onClick={() => startQuiz(quiz.id)}
-                        disabled={loadingQuiz}
+                        disabled={loadingQuizId === quiz.id}
                         className="w-full bg-brass-600 hover:bg-brass-700 text-white font-semibold px-5 py-3 rounded-xl shadow-soft transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        {loadingQuiz ? <Loader2 className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" strokeWidth={1.75} />}
-                        {loadingQuiz ? 'Loading...' : 'Take Quiz'}
+                        {loadingQuizId === quiz.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Brain className="w-4 h-4" strokeWidth={1.75} />
+                        )}
+                        {loadingQuizId === quiz.id ? 'Loading...' : 'Take Quiz'}
                       </button>
                     )}
                   </div>
@@ -1048,6 +1146,14 @@ export default function StudentDashboard() {
           )}
         </div>
       )}
+
+      <style>{`
+        @keyframes fade-in-up {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-up { animation: fade-in-up 0.6s ease-out both; }
+      `}</style>
     </Layout>
   );
 }

@@ -16,6 +16,10 @@ import {
   Calendar,
   Paperclip,
   Inbox,
+  GraduationCap,
+  Eye,
+  Download,
+  AlertCircle,
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://dayspring-hub.onrender.com/api/v1/';
@@ -39,69 +43,122 @@ export default function ParentDashboard() {
   const [availableQuizzes, setAvailableQuizzes] = useState([]);
   const [quizResults, setQuizResults] = useState({});
   const [viewingQuizResult, setViewingQuizResult] = useState(null);
+  
+  // Child progress states
+  const [childProgress, setChildProgress] = useState({});
+  const [loadingProgress, setLoadingProgress] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [msgType, setMsgType] = useState('success');
 
   useEffect(() => {
     if (!user || user.role !== 'parent') {
       navigate('/login');
       return;
     }
-    fetch(`${API_URL}parent/students/`, {
-      headers: { Authorization: `Bearer ${user.access_token}` }
-    })
-      .then(r => r.json())
-      .then(data => {
-        setChildren(data);
-        if (data.length > 0) setSelectedChildId(data[0].id);
-      });
+    fetchChildren();
   }, [user]);
 
   useEffect(() => {
-    if (selectedChildId) fetchContent();
+    if (selectedChildId) {
+      fetchContent();
+      fetchChildProgress(selectedChildId);
+    }
   }, [selectedChildId, tab]);
+
+  const showMsg = (text, type = 'success') => {
+    setMsg(text);
+    setMsgType(type);
+    setTimeout(() => setMsg(''), 4000);
+  };
+
+  const fetchChildren = async () => {
+    try {
+      const res = await fetch(`${API_URL}parent/students/`, {
+        headers: { Authorization: `Bearer ${user.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChildren(data);
+        if (data.length > 0) {
+          setSelectedChildId(data[0].id);
+        }
+      } else {
+        showMsg('Failed to load children', 'error');
+      }
+    } catch (err) {
+      showMsg('Failed to load children', 'error');
+    }
+  };
+
+  const fetchChildProgress = async (studentId) => {
+    setLoadingProgress(true);
+    try {
+      const res = await fetch(`${API_URL}parent/students/${studentId}/progress/`, {
+        headers: { Authorization: `Bearer ${user.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChildProgress(prev => ({ ...prev, [studentId]: data }));
+      }
+    } catch (err) {
+      console.error('Failed to fetch child progress:', err);
+    } finally {
+      setLoadingProgress(false);
+    }
+  };
 
   const fetchContent = async () => {
     if (!selectedChildId) return;
     const headers = { Authorization: `Bearer ${user.access_token}` };
     const param = `?student_id=${selectedChildId}`;
 
-    const [matRes, assRes, annRes, quizRes] = await Promise.all([
-      fetch(`${API_URL}materials/${param}`, { headers }),
-      fetch(`${API_URL}assignments/${param}`, { headers }),
-      fetch(`${API_URL}announcements/${param}`, { headers }),
-      fetch(`${API_URL}parent/quizzes/${selectedChildId}/`, { headers }),
-    ]);
+    try {
+      const [matRes, assRes, annRes, quizRes] = await Promise.all([
+        fetch(`${API_URL}materials/${param}`, { headers }),
+        fetch(`${API_URL}assignments/${param}`, { headers }),
+        fetch(`${API_URL}announcements/${param}`, { headers }),
+        fetch(`${API_URL}parent/quizzes/${selectedChildId}/`, { headers }),
+      ]);
 
-    if (matRes.ok) setMaterials(await matRes.json());
+      if (matRes.ok) setMaterials(await matRes.json());
+      if (annRes.ok) {
+        const annData = await annRes.json();
+        setAnnouncements(annData);
+        updateNotifications('parent', annData, 'announcements');
+      }
 
-    if (assRes.ok) {
-      const assData = await assRes.json();
-      setAssignments(assData);
-      updateNotifications('parent', assData, 'assignments');
+      if (assRes.ok) {
+        const assData = await assRes.json();
+        setAssignments(assData);
+        updateNotifications('parent', assData, 'assignments');
 
-      assData.forEach(async (ass) => {
-        const subRes = await fetch(`${API_URL}submissions/student/${selectedChildId}/${ass.id}/`, { headers });
-        if (subRes.ok) {
-          const subData = await subRes.json();
-          if (subData?.id) {
-            setSubmissionData(prev => ({ ...prev, [ass.id]: subData }));
+        // Fetch submissions for each assignment
+        assData.forEach(async (ass) => {
+          try {
+            const subRes = await fetch(`${API_URL}submissions/student/${selectedChildId}/${ass.id}/`, { headers });
+            if (subRes.ok) {
+              const subData = await subRes.json();
+              if (subData?.id) {
+                setSubmissionData(prev => ({ ...prev, [ass.id]: subData }));
+              }
+            }
+          } catch (err) {
+            console.error('Failed to fetch submission:', err);
           }
-        }
-      });
-    }
+        });
+      }
 
-    if (annRes.ok) {
-      const annData = await annRes.json();
-      setAnnouncements(annData);
-      updateNotifications('parent', annData, 'announcements');
-    }
+      if (quizRes.ok) {
+        const quizData = await quizRes.json();
+        setAvailableQuizzes(quizData);
 
-    if (quizRes.ok) {
-      const quizData = await quizRes.json();
-      setAvailableQuizzes(quizData);
-
-      quizData.forEach(quiz => {
-        fetchQuizResult(quiz.id);
-      });
+        // Fetch results for each quiz
+        quizData.forEach(quiz => {
+          fetchQuizResult(quiz.id);
+        });
+      }
+    } catch (err) {
+      showMsg('Failed to fetch content', 'error');
     }
   };
 
@@ -119,6 +176,68 @@ export default function ParentDashboard() {
     }
   };
 
+  const viewChildComprehensiveResults = async (studentId) => {
+    try {
+      const res = await fetch(`${API_URL}parent/students/${studentId}/results/`, {
+        headers: { Authorization: `Bearer ${user.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Format for the result modal
+        const student = children.find(c => c.id === studentId);
+        
+        // Calculate totals from quiz data
+        let totalPoints = 0;
+        let totalPossible = 0;
+        let gradedCount = 0;
+        const answers = [];
+
+        if (data.quizzes && data.quizzes.length > 0) {
+          // Get detailed answers for each quiz
+          for (const quiz of data.quizzes) {
+            const detailRes = await fetch(`${API_URL}parent/quiz-result/${studentId}/${quiz.quiz_id}/`, {
+              headers: { Authorization: `Bearer ${user.access_token}` }
+            });
+            if (detailRes.ok) {
+              const detailData = await detailRes.json();
+              if (detailData.answers) {
+                detailData.answers.forEach(ans => {
+                  answers.push({
+                    ...ans,
+                    quiz_title: quiz.title,
+                  });
+                  if (ans.points !== null) {
+                    totalPoints += ans.points;
+                    gradedCount++;
+                  }
+                });
+              }
+            }
+          }
+          totalPossible = answers.length * 5; // Assuming 5 points per question
+        }
+
+        setViewingQuizResult({
+          student_name: student?.display_name || 'Student',
+          student_number: student?.student_number || 'N/A',
+          class_name: student?.class_name || 'Unknown',
+          quiz_title: 'Comprehensive Results',
+          total_points: totalPoints,
+          total_possible: totalPossible,
+          answers: answers,
+          graded_count: gradedCount,
+          total_questions: answers.length,
+          assignments: data.assignments || [],
+          quizzes: data.quizzes || [],
+        });
+      } else {
+        showMsg('Failed to load child results', 'error');
+      }
+    } catch (err) {
+      showMsg('Failed to load child results', 'error');
+    }
+  };
+
   const filteredChildren = children.filter(child => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
@@ -126,7 +245,7 @@ export default function ParentDashboard() {
            child.student_number.toLowerCase().includes(term);
   });
 
-  // Grade status colors — forest (good) / brass (pending) / oxbrick (poor)
+  // Grade status colors
   const getGradeColor = (percentage) => {
     if (percentage >= 70) return 'text-forest-600 dark:text-forest-500';
     if (percentage >= 40) return 'text-brass-600 dark:text-brass-400';
@@ -175,6 +294,7 @@ export default function ParentDashboard() {
 
   return (
     <Layout role="parent" navLinks={navLinks}>
+      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4 animate-fade-in-up">
         <div>
           <h1 className="text-3xl md:text-4xl font-display font-semibold text-navy-800 dark:text-white flex items-center gap-3">
@@ -199,44 +319,161 @@ export default function ParentDashboard() {
         </div>
       </div>
 
-      {/* ===== QUIZ RESULT MODAL ===== */}
+      {msg && (
+        <div className={`px-4 py-3 rounded-xl mb-6 text-sm font-medium animate-fade-in-up flex items-center gap-2 ${
+          msgType === 'error'
+            ? 'bg-oxbrick-50 dark:bg-oxbrick-700/20 text-oxbrick-600 dark:text-oxbrick-500 border border-oxbrick-200 dark:border-oxbrick-700/40'
+            : 'bg-forest-50 dark:bg-forest-700/20 text-forest-600 dark:text-forest-500 border border-forest-500/20'
+        }`}>
+          {msgType === 'error' ? <AlertCircle className="w-4 h-4" strokeWidth={1.75} /> : <CheckCircle2 className="w-4 h-4" strokeWidth={1.75} />}
+          {msg}
+        </div>
+      )}
+
+      {/* ===== CHILD QUIZ RESULT DETAIL MODAL ===== */}
       {viewingQuizResult && (
         <div className="fixed inset-0 bg-navy-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-navy-800 rounded-3xl shadow-elevated max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6 md:p-8">
+          <div className="bg-white dark:bg-navy-800 rounded-3xl shadow-elevated max-w-3xl w-full max-h-[80vh] overflow-y-auto p-6 md:p-8">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-display font-semibold text-navy-800 dark:text-white flex items-center gap-2">
-                <BarChart3 className="w-6 h-6 text-brass-500" strokeWidth={1.75} /> {viewingQuizResult.quiz_title}
+                <BarChart3 className="w-6 h-6 text-brass-500" strokeWidth={1.75} />
+                {viewingQuizResult.student_name}'s Results
               </h2>
-              <button onClick={() => setViewingQuizResult(null)} className="text-ink-400 hover:text-navy-700 dark:hover:text-white p-1.5 rounded transition-colors">
+              <button onClick={() => setViewingQuizResult(null)}
+                className="text-ink-400 hover:text-navy-700 dark:hover:text-white p-1.5 rounded transition-colors">
                 <X className="w-5 h-5" strokeWidth={1.75} />
               </button>
             </div>
+
+            {/* Student Info */}
+            <div className="bg-ink-50 dark:bg-navy-700 rounded-xl p-4 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-xs text-ink-500 dark:text-ink-300">Student</p>
+                  <p className="font-semibold text-navy-800 dark:text-white">{viewingQuizResult.student_name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-500 dark:text-ink-300">Student Number</p>
+                  <p className="font-semibold text-navy-800 dark:text-white">{viewingQuizResult.student_number}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-500 dark:text-ink-300">Class</p>
+                  <p className="font-semibold text-navy-800 dark:text-white">{viewingQuizResult.class_name}</p>
+                </div>
+              </div>
+            </div>
+
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-ink-500 dark:text-ink-300">Score</span>
-                <span className="text-2xl font-display font-semibold text-navy-800 dark:text-white">{viewingQuizResult.total_points} / {viewingQuizResult.total_possible}</span>
+                <span className="text-ink-500 dark:text-ink-300">Overall Score</span>
+                <span className="text-2xl font-display font-semibold text-navy-800 dark:text-white">
+                  {viewingQuizResult.total_points} / {viewingQuizResult.total_possible}
+                </span>
               </div>
               <div className="w-full bg-ink-200 dark:bg-navy-600 rounded-full h-2.5">
-                <div className={`h-2.5 rounded-full ${(viewingQuizResult.total_points / viewingQuizResult.total_possible) * 100 >= 70 ? 'bg-forest-600' : (viewingQuizResult.total_points / viewingQuizResult.total_possible) * 100 >= 40 ? 'bg-brass-500' : 'bg-oxbrick-600'}`}
-                  style={{ width: `${viewingQuizResult.total_possible > 0 ? Math.round((viewingQuizResult.total_points / viewingQuizResult.total_possible) * 100) : 0}%` }} />
+                <div className={`h-2.5 rounded-full transition-all duration-500 ${
+                  viewingQuizResult.total_possible > 0
+                    ? (viewingQuizResult.total_points / viewingQuizResult.total_possible) * 100 >= 70
+                      ? 'bg-forest-600' : (viewingQuizResult.total_points / viewingQuizResult.total_possible) * 100 >= 40
+                      ? 'bg-brass-500' : 'bg-oxbrick-600'
+                    : 'bg-ink-400'
+                }`} style={{ width: `${viewingQuizResult.total_possible > 0 ? Math.round((viewingQuizResult.total_points / viewingQuizResult.total_possible) * 100) : 0}%` }} />
               </div>
-              <p className="text-sm text-ink-400 dark:text-ink-500 mt-1 text-right">{viewingQuizResult.total_possible > 0 ? Math.round((viewingQuizResult.total_points / viewingQuizResult.total_possible) * 100) : 0}%</p>
+              <p className="text-sm text-ink-400 dark:text-ink-500 mt-1 text-right">
+                {viewingQuizResult.total_possible > 0 ? Math.round((viewingQuizResult.total_points / viewingQuizResult.total_possible) * 100) : 0}%
+              </p>
+              
+              <div className="flex items-center gap-4 mt-2">
+                <span className="text-xs text-ink-500 dark:text-ink-300">
+                  {viewingQuizResult.graded_count} / {viewingQuizResult.total_questions} questions graded
+                </span>
+                {viewingQuizResult.quiz_title && viewingQuizResult.quiz_title !== 'Comprehensive Results' && (
+                  <span className="text-xs bg-brass-50 dark:bg-brass-700/20 text-brass-700 dark:text-brass-400 px-2 py-0.5 rounded-full">
+                    {viewingQuizResult.quiz_title}
+                  </span>
+                )}
+              </div>
             </div>
+
             <div className="space-y-4">
-              <h3 className="font-semibold text-navy-800 dark:text-ink-100">Question Breakdown</h3>
-              {viewingQuizResult.answers?.map((ans, idx) => (
-                <div key={idx} className="border border-ink-200 dark:border-navy-600 rounded-xl p-4">
-                  <p className="font-medium text-navy-800 dark:text-ink-100 text-sm mb-2">Q{idx + 1}: {ans.question_text}</p>
-                  {ans.points !== null ? (
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-forest-600 dark:text-forest-500">Points: {ans.points}</span>
-                      {ans.feedback && <span className="text-xs text-ink-500 dark:text-ink-300">Feedback: {ans.feedback}</span>}
+              <h3 className="font-semibold text-navy-800 dark:text-ink-100 flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-brass-500" strokeWidth={1.75} />
+                Question Breakdown
+                {viewingQuizResult.quiz_title === 'Comprehensive Results' && (
+                  <span className="text-xs text-ink-500 dark:text-ink-300 font-normal">(All quizzes)</span>
+                )}
+              </h3>
+              
+              {viewingQuizResult.answers && viewingQuizResult.answers.length > 0 ? (
+                viewingQuizResult.answers.map((ans, idx) => {
+                  const isCorrect = ans.is_correct === true;
+                  const isIncorrect = ans.is_correct === false;
+                  
+                  return (
+                    <div key={idx} className={`border rounded-xl p-4 ${
+                      isCorrect ? 'border-forest-200 dark:border-forest-700/40 bg-forest-50/30 dark:bg-forest-700/10' :
+                      isIncorrect ? 'border-oxbrick-200 dark:border-oxbrick-700/40 bg-oxbrick-50/30 dark:bg-oxbrick-700/10' :
+                      'border-ink-200 dark:border-navy-600'
+                    }`}>
+                      <div className="flex items-start justify-between">
+                        <p className="font-medium text-navy-800 dark:text-ink-100 text-sm mb-2 flex-1">
+                          Q{idx + 1}: {ans.question_text || 'Question'}
+                        </p>
+                        {isCorrect && (
+                          <span className="text-forest-600 dark:text-forest-500 text-xs font-semibold flex items-center gap-1 ml-2">
+                            <CheckCircle2 className="w-3.5 h-3.5" strokeWidth={1.75} /> Correct
+                          </span>
+                        )}
+                        {isIncorrect && (
+                          <span className="text-oxbrick-600 dark:text-oxbrick-500 text-xs font-semibold flex items-center gap-1 ml-2">
+                            <X className="w-3.5 h-3.5" strokeWidth={1.75} /> Incorrect
+                          </span>
+                        )}
+                      </div>
+
+                      {ans.question_type === 'multiple_choice' ? (
+                        <p className="text-sm text-ink-600 dark:text-ink-300">
+                          Student selected: <span className="font-semibold text-navy-800 dark:text-ink-100">
+                            {ans.selected_option_text || 'No selection'}
+                          </span>
+                        </p>
+                      ) : (
+                        <div className="bg-white dark:bg-navy-700 p-3 rounded-lg">
+                          <p className="text-sm text-ink-600 dark:text-ink-300">
+                            Student's answer: <span className="font-semibold text-navy-800 dark:text-ink-100">
+                              {ans.text_answer || 'No answer provided'}
+                            </span>
+                          </p>
+                        </div>
+                      )}
+
+                      {ans.correct_answer && (
+                        <div className="mt-2 bg-forest-50 dark:bg-forest-700/20 border border-forest-200 dark:border-forest-700/40 rounded-lg p-2">
+                          <p className="text-xs text-forest-700 dark:text-forest-400">
+                            <CheckCircle2 className="w-3 h-3 inline mr-1" strokeWidth={1.75} />
+                            Correct answer: <span className="font-semibold">{ans.correct_answer}</span>
+                          </p>
+                        </div>
+                      )}
+
+                      {ans.points !== null && (
+                        <div className="flex items-center justify-between mt-2">
+                          <span className={`text-sm font-semibold ${
+                            ans.points > 0 ? 'text-forest-600 dark:text-forest-500' : 'text-oxbrick-600 dark:text-oxbrick-500'
+                          }`}>
+                            Points: {ans.points}
+                          </span>
+                          {ans.feedback && (
+                            <span className="text-xs text-ink-500 dark:text-ink-300">Feedback: {ans.feedback}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <span className="text-xs text-brass-600 dark:text-brass-400">Not yet graded</span>
-                  )}
-                </div>
-              ))}
+                  );
+                })
+              ) : (
+                <p className="text-ink-400 dark:text-ink-500 text-sm">No questions available.</p>
+              )}
             </div>
           </div>
         </div>
@@ -245,6 +482,7 @@ export default function ParentDashboard() {
       {/* ===== HOME TAB ===== */}
       {tab === 'home' && (
         <div className="space-y-8 animate-fade-in-up">
+          {/* Stats Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-navy-700 rounded-2xl p-5 shadow-card text-white">
               <div className="flex items-center justify-between mb-3"><p className="text-sm font-medium text-navy-200">Materials</p><BookOpen className="w-5 h-5 text-brass-400" strokeWidth={1.75} /></div>
@@ -262,6 +500,69 @@ export default function ParentDashboard() {
               <div className="flex items-center justify-between mb-3"><p className="text-sm font-medium text-navy-200">Quizzes Done</p><Brain className="w-5 h-5 text-brass-400" strokeWidth={1.75} /></div>
               <p className="text-3xl md:text-4xl font-display font-semibold">{completedQuizzes}/{totalQuizzes}</p>
             </div>
+          </div>
+
+          {/* Children's Progress Overview */}
+          <div className="bg-white dark:bg-navy-800 rounded-2xl shadow-card border border-ink-200 dark:border-navy-600 p-6">
+            <h3 className="text-xl font-display font-semibold text-navy-800 dark:text-white mb-4 flex items-center gap-2">
+              <GraduationCap className="w-5 h-5 text-brass-500" strokeWidth={1.75} /> 
+              Your Children's Progress
+            </h3>
+            
+            {children.length === 0 ? (
+              <div className="text-center py-8">
+                <Users className="w-12 h-12 text-ink-300 dark:text-ink-500 mx-auto mb-2" strokeWidth={1.5} />
+                <p className="text-ink-400 dark:text-ink-500">No students linked to your account.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {children.map(student => {
+                  const progress = childProgress[student.id];
+                  return (
+                    <div key={student.id} className="border border-ink-200 dark:border-navy-600 rounded-xl p-4 hover:bg-ink-50 dark:hover:bg-navy-700/50 transition-colors">
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div>
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-brass-100 dark:bg-brass-700/30 flex items-center justify-center font-display font-semibold text-brass-700 dark:text-brass-400 text-sm">
+                              {student.display_name?.charAt(0) || 'S'}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-navy-800 dark:text-white">{student.display_name}</p>
+                              <p className="text-xs text-ink-500 dark:text-ink-300">{student.student_number}</p>
+                              <p className="text-xs text-ink-400 dark:text-ink-500">Class: {student.class_name || 'Not assigned'}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          {progress && (
+                            <div className="flex items-center gap-3 text-xs">
+                              <span className="text-ink-500 dark:text-ink-300">
+                                📝 {progress.assignments?.graded || 0}/{progress.assignments?.total || 0} graded
+                              </span>
+                              <span className="text-ink-500 dark:text-ink-300">
+                                🧠 {progress.quizzes?.completed || 0}/{progress.quizzes?.total || 0} quizzes
+                              </span>
+                              {progress.assignments?.average_grade && (
+                                <span className={`font-semibold ${getGradeColor(progress.assignments.average_grade)}`}>
+                                  Avg: {Math.round(progress.assignments.average_grade)}%
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {loadingProgress && <Loader2 className="w-4 h-4 animate-spin text-brass-500" strokeWidth={1.75} />}
+                          <button 
+                            onClick={() => viewChildComprehensiveResults(student.id)}
+                            className="bg-brass-50 dark:bg-brass-700/20 text-brass-700 dark:text-brass-400 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-brass-100 dark:hover:bg-brass-700/30 transition-colors flex items-center gap-1"
+                          >
+                            <Eye className="w-3.5 h-3.5" strokeWidth={1.75} /> View Results
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Assignment Progress */}
@@ -388,6 +689,7 @@ export default function ParentDashboard() {
                   <h3 className="font-semibold text-xl text-navy-800 dark:text-white flex items-center gap-2"><ClipboardList className="w-5 h-5 text-brass-500" strokeWidth={1.75} /> {a.title}</h3>
                   {sub?.grade && <span className="bg-forest-50 dark:bg-forest-700/20 text-forest-700 dark:text-forest-500 px-3 py-1 rounded-full text-xs font-semibold">Graded: {sub.grade}</span>}
                   {sub?.id && !sub?.grade && <span className="bg-brass-50 dark:bg-brass-700/20 text-brass-700 dark:text-brass-400 px-3 py-1 rounded-full text-xs font-semibold">Submitted</span>}
+                  {!sub?.id && <span className="bg-oxbrick-50 dark:bg-oxbrick-700/20 text-oxbrick-700 dark:text-oxbrick-500 px-3 py-1 rounded-full text-xs font-semibold">Not Submitted</span>}
                 </div>
                 {a.description && <p className="text-sm text-ink-500 dark:text-ink-300 mb-3">{a.description}</p>}
                 {a.deadline && <p className="text-xs font-semibold text-oxbrick-600 dark:text-oxbrick-500 mb-3 flex items-center gap-1"><Calendar className="w-3.5 h-3.5" strokeWidth={1.75} /> Due: {new Date(a.deadline).toLocaleString()}</p>}
@@ -447,6 +749,14 @@ export default function ParentDashboard() {
           )}
         </div>
       )}
+
+      <style>{`
+        @keyframes fade-in-up {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-up { animation: fade-in-up 0.6s ease-out both; }
+      `}</style>
     </Layout>
   );
 }

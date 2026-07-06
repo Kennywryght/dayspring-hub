@@ -111,6 +111,7 @@ export default function AdminDashboard() {
   const [deletedStudents, setDeletedStudents] = useState([]);
   const [deletedTeachers, setDeletedTeachers] = useState([]);
   const [deletedParents, setDeletedParents] = useState([]);
+  const [deletedSubjects, setDeletedSubjects] = useState([]);
 
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState('success');
@@ -170,16 +171,22 @@ export default function AdminDashboard() {
   };
 
   const fetchTrashItems = async () => {
-    const [cRes, sRes, tRes, pRes] = await Promise.all([
-      fetch(`${API_URL}admin/classes/trash/`, { headers }),
-      fetch(`${API_URL}admin/students/trash/`, { headers }),
-      fetch(`${API_URL}admin/teachers/trash/`, { headers }),
-      fetch(`${API_URL}admin/parents/trash/`, { headers }),
-    ]);
-    if (cRes.ok) setDeletedClasses(await cRes.json());
-    if (sRes.ok) setDeletedStudents(await sRes.json());
-    if (tRes.ok) setDeletedTeachers(await tRes.json());
-    if (pRes.ok) setDeletedParents(await pRes.json());
+    try {
+      const res = await fetch(`${API_URL}admin/trash/`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        // Separate items by type
+        setDeletedClasses(data.filter(item => item.type === 'class'));
+        setDeletedTeachers(data.filter(item => item.type === 'teacher'));
+        setDeletedParents(data.filter(item => item.type === 'parent'));
+        setDeletedStudents(data.filter(item => item.type === 'student'));
+        setDeletedSubjects(data.filter(item => item.type === 'subject'));
+      } else {
+        console.error('Failed to fetch trash items');
+      }
+    } catch (err) {
+      console.error('Error fetching trash:', err);
+    }
   };
 
   const fetchUnassignedStudents = async () => {
@@ -287,6 +294,27 @@ export default function AdminDashboard() {
     else showMsg('Failed', 'error');
   };
 
+  const softDeleteSubject = async (id) => {
+    if (!confirm('Move this subject to trash?')) return;
+    const r = await fetch(`${API_URL}admin/subjects/${id}/soft-delete/`, { method: 'DELETE', headers });
+    if (r.ok) { showMsg('Subject moved to trash'); fetchAll(); if (tab === 'trash') fetchTrashItems(); }
+    else showMsg('Failed', 'error');
+  };
+
+  const restoreSubject = async (id) => {
+    if (!confirm('Restore this subject?')) return;
+    const r = await fetch(`${API_URL}admin/subjects/${id}/restore/`, { method: 'PUT', headers });
+    if (r.ok) { showMsg('Subject restored'); fetchAll(); fetchTrashItems(); }
+    else showMsg('Failed', 'error');
+  };
+
+  const permanentDeleteSubject = async (id) => {
+    if (!confirm('Permanently delete this subject? This cannot be undone!')) return;
+    const r = await fetch(`${API_URL}admin/subjects/${id}/permanent/`, { method: 'DELETE', headers });
+    if (r.ok) { showMsg('Subject permanently deleted'); fetchAll(); fetchTrashItems(); }
+    else showMsg('Failed', 'error');
+  };
+
   // ===== EDIT FUNCTIONS =====
   const updateClass = async () => {
     if (!editingClass || !editClassName.trim()) return;
@@ -297,7 +325,10 @@ export default function AdminDashboard() {
     else { const err = await res.json().catch(() => ({})); showMsg(err.detail || 'Failed', 'error'); }
   };
 
-  const deleteSubject = async (id) => { if (!confirm('Delete this subject?')) return; const r = await fetch(`${API_URL}admin/subjects/${id}/`, { method: 'DELETE', headers }); if (r.ok) { showMsg('Subject deleted'); fetchAll(); } else showMsg('Failed', 'error'); };
+  const deleteSubject = async (id) => { 
+    if (!confirm('Move this subject to trash?')) return; 
+    softDeleteSubject(id);
+  };
 
   const updateSubject = async () => {
     if (!editingSubject || !editSubjectName.trim()) return;
@@ -1389,7 +1420,42 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {deletedClasses.length === 0 && deletedStudents.length === 0 && deletedTeachers.length === 0 && deletedParents.length === 0 && (
+          {/* Deleted Subjects */}
+          {deletedSubjects.length > 0 && (
+            <div className="bg-white dark:bg-navy-800 rounded-2xl shadow-card border border-ink-200 dark:border-navy-600 p-6">
+              <h3 className="font-display font-semibold text-navy-800 dark:text-white mb-4">
+                Deleted Subjects ({deletedSubjects.length})
+              </h3>
+              <div className="space-y-3">
+                {deletedSubjects.map(s => (
+                  <div key={s.id} className="flex items-center justify-between p-4 bg-ink-50 dark:bg-navy-700 rounded-xl">
+                    <div>
+                      <p className="font-medium text-navy-800 dark:text-white">{s.name}</p>
+                      <p className="text-xs text-ink-500 dark:text-ink-300">
+                        Deleted: {s.deleted_at ? new Date(s.deleted_at).toLocaleDateString() : 'Unknown'}
+                      </p>
+                    </div>
+                    <div className="flex gap-3">
+                      <button 
+                        onClick={() => restoreSubject(s.id)} 
+                        className="text-forest-600 dark:text-forest-500 text-sm font-medium hover:underline flex items-center gap-1"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.75} /> Restore
+                      </button>
+                      <button 
+                        onClick={() => permanentDeleteSubject(s.id)} 
+                        className="text-oxbrick-600 dark:text-oxbrick-500 text-sm font-medium hover:underline"
+                      >
+                        Permanent Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {deletedClasses.length === 0 && deletedStudents.length === 0 && deletedTeachers.length === 0 && deletedParents.length === 0 && deletedSubjects.length === 0 && (
             <div className="text-center py-20 bg-white dark:bg-navy-800 rounded-3xl border border-dashed border-ink-300 dark:border-navy-600">
               <Trash2 className="w-10 h-10 text-ink-300 dark:text-ink-500 mx-auto" strokeWidth={1.5} />
               <p className="text-ink-400 dark:text-ink-500 mt-4 text-base font-medium">Trash is empty.</p>

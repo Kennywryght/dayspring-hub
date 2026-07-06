@@ -323,40 +323,107 @@ async def stats(admin=Depends(require_admin)):
     
     
 # ==================== SOFT DELETE & RESTORE ====================
-@router.put("/soft-delete/")
-async def soft_delete_entity(type: str, id: str, admin=Depends(require_admin)):
-    """Mark an entity as deleted (soft delete)"""
-    table_map = {"class": "classes", "subject": "subjects", "teacher": "profiles", "parent": "profiles", "student": "students"}
-    table = table_map.get(type)
-    if not table: raise HTTPException(400, detail="Invalid type")
-    supabase.table(table).update({"deleted": True, "deleted_at": "now()"}).eq("id", id).execute()
-    return {"message": f"{type} marked as deleted"}
+@router.delete("/classes/{class_id}/soft-delete/")
+async def soft_delete_class(class_id: str, admin=Depends(require_admin)):
+    """Soft delete a class (mark as deleted)"""
+    supabase.table("classes").update({
+        "deleted": True, 
+        "deleted_at": datetime.utcnow().isoformat()
+    }).eq("id", class_id).execute()
+    
+    # Also soft delete related assignments
+    supabase.table("assignments").update({
+        "deleted": True,
+        "deleted_at": datetime.utcnow().isoformat()
+    }).eq("class_id", class_id).execute()
+    
+    return {"message": "Class moved to trash"}
 
-@router.put("/restore/")
-async def restore_entity(type: str, id: str, admin=Depends(require_admin)):
-    """Restore a soft-deleted entity"""
-    table_map = {"class": "classes", "subject": "subjects", "teacher": "profiles", "parent": "profiles", "student": "students"}
-    table = table_map.get(type)
-    if not table: raise HTTPException(400, detail="Invalid type")
-    supabase.table(table).update({"deleted": False, "deleted_at": None}).eq("id", id).execute()
-    return {"message": f"{type} restored"}
+@router.put("/classes/{class_id}/restore/")
+async def restore_class(class_id: str, admin=Depends(require_admin)):
+    """Restore a soft-deleted class"""
+    supabase.table("classes").update({
+        "deleted": False,
+        "deleted_at": None
+    }).eq("id", class_id).execute()
+    
+    # Restore related assignments
+    supabase.table("assignments").update({
+        "deleted": False,
+        "deleted_at": None
+    }).eq("class_id", class_id).execute()
+    
+    return {"message": "Class restored"}
 
-@router.get("/deleted/")
-async def list_deleted(admin=Depends(require_admin)):
-    """Get all soft-deleted entities"""
-    deleted = []
-    for table in ["classes", "subjects", "students"]:
-        res = supabase.table(table).select("id, name, deleted_at").eq("deleted", True).execute()
-        for r in res.data: deleted.append({**r, "type": table[:-1]})
-    for table in ["profiles"]:
-        res = supabase.table(table).select("id, full_name, role, deleted_at").eq("deleted", True).execute()
-        for r in res.data: deleted.append({"id": r["id"], "name": r.get("full_name", ""), "type": r.get("role", "unknown"), "deleted_at": r.get("deleted_at")})
-    return deleted
+@router.delete("/classes/{class_id}/permanent/")
+async def permanent_delete_class(class_id: str, admin=Depends(require_admin)):
+    """Permanently delete a class"""
+    # Delete related records first
+    supabase.table("class_teachers").delete().eq("class_id", class_id).execute()
+    supabase.table("assignments").delete().eq("class_id", class_id).execute()
+    supabase.table("materials").delete().eq("class_id", class_id).execute()
+    supabase.table("students").update({"class_id": None}).eq("class_id", class_id).execute()
+    supabase.table("classes").delete().eq("id", class_id).execute()
+    return {"message": "Class permanently deleted"}
 
-@router.post("/create-student/")
-async def create_student(student_number: str, password: str, display_name: str, class_id: str = None, admin=Depends(require_admin)):
-    data = {"student_number": student_number, "password": password, "display_name": display_name}
-    if class_id: data["class_id"] = class_id
-    res = supabase.table("students").insert(data).execute()
-    if res.data: return res.data[0]
-    raise HTTPException(500, detail="Failed")
+@router.get("/trash/")
+async def get_trash_items(admin=Depends(require_admin)):
+    """Get all soft-deleted items"""
+    items = []
+    
+    # Get deleted classes
+    classes = supabase.table("classes").select("*").eq("deleted", True).execute()
+    for c in classes.data:
+        items.append({
+            "id": c["id"],
+            "name": c.get("name", "Unknown"),
+            "type": "class",
+            "deleted_at": c.get("deleted_at"),
+            "metadata": {"grade": c.get("grade")}
+        })
+    
+    # Get deleted subjects
+    subjects = supabase.table("subjects").select("*").eq("deleted", True).execute()
+    for s in subjects.data:
+        items.append({
+            "id": s["id"],
+            "name": s.get("name", "Unknown"),
+            "type": "subject",
+            "deleted_at": s.get("deleted_at")
+        })
+    
+    # Get deleted teachers
+    teachers = supabase.table("profiles").select("*").eq("role", "teacher").eq("deleted", True).execute()
+    for t in teachers.data:
+        items.append({
+            "id": t["id"],
+            "name": t.get("full_name", "Unknown"),
+            "type": "teacher",
+            "deleted_at": t.get("deleted_at")
+        })
+    
+    # Get deleted parents
+    parents = supabase.table("profiles").select("*").eq("role", "parent").eq("deleted", True).execute()
+    for p in parents.data:
+        items.append({
+            "id": p["id"],
+            "name": p.get("full_name", "Unknown"),
+            "type": "parent",
+            "deleted_at": p.get("deleted_at")
+        })
+    
+    # Get deleted students
+    students = supabase.table("students").select("*").eq("deleted", True).execute()
+    for s in students.data:
+        items.append({
+            "id": s["id"],
+            "name": s.get("display_name", "Unknown"),
+            "type": "student",
+            "deleted_at": s.get("deleted_at"),
+            "metadata": {"student_number": s.get("student_number")}
+        })
+    
+    # Sort by deleted_at (most recent first)
+    items.sort(key=lambda x: x.get("deleted_at", ""), reverse=True)
+    
+    return items

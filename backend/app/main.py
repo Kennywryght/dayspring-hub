@@ -10,6 +10,7 @@ from app.routers import (
     announcements, students_crud, parent,
     admin, teacher, auth_admin, quiz
 )
+from app.redis_config import RedisClient
 
 # ------------------------------------------------------------------
 # Logging (optional – helps to see that the server is alive)
@@ -85,6 +86,20 @@ def root():
     return {"status": "ok"}
 
 # ------------------------------------------------------------------
+# Health check with Redis status
+# ------------------------------------------------------------------
+@app.get("/api/v1/health")
+async def health_check():
+    redis_client = RedisClient()
+    redis_status = redis_client.get_stats() if redis_client.is_connected() else {"connected": False}
+    
+    return {
+        "status": "healthy",
+        "redis": redis_status,
+        "cors_origins": allow_origins
+    }
+
+# ------------------------------------------------------------------
 # CORS pre-flight handler (explicit OPTIONS handler)
 # ------------------------------------------------------------------
 @app.options("/{full_path:path}")
@@ -106,3 +121,10 @@ async def options_handler(full_path: str, request: Request):
 async def startup_event():
     logger.info("🚀 Dayspring Student Support Hub is starting up")
     logger.info(f"Allowed origins: {allow_origins}")
+    
+    # Test Redis connection
+    redis_client = RedisClient()
+    if redis_client.is_connected():
+        logger.info("✅ Redis is connected and ready")
+    else:
+        logger.warning("⚠️ Redis is not connected - caching will be disabled")
