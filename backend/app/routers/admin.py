@@ -21,12 +21,13 @@ async def require_admin(current_user: dict = Depends(get_current_user)):
 # ==================== CLASSES ====================
 @router.get("/classes/")
 async def list_classes(admin=Depends(require_admin)):
-    res = supabase.table("classes").select("*").execute()
+    """List all non-deleted classes"""
+    res = supabase.table("classes").select("*").eq("deleted", False).execute()
     return res.data
 
 @router.post("/classes/")
 async def create_class(name: str, grade: Optional[str] = None, admin=Depends(require_admin)):
-    data = {"name": name, "grade": grade}
+    data = {"name": name, "grade": grade, "deleted": False}
     res = supabase.table("classes").insert(data).execute()
     if res.data:
         return res.data[0]
@@ -54,15 +55,16 @@ async def update_class(class_id: str, name: str, grade: str = None, admin=Depend
 # ==================== DETAILED CLASSES ====================
 @router.get("/classes/detailed/")
 async def list_classes_detailed(admin=Depends(require_admin)):
+    """List all non-deleted classes with details"""
     try:
-        classes = supabase.table("classes").select("*").execute()
+        classes = supabase.table("classes").select("*").eq("deleted", False).execute()
         result = []
         for c in classes.data:
             assignments = supabase.table("class_teachers").select("*, profiles(full_name), subjects(name)").eq("class_id", c["id"]).execute()
             teachers = []
             for a in assignments.data:
                 teachers.append({"teacher_name": a.get("profiles", {}).get("full_name", "Unknown"), "subject_name": a.get("subjects", {}).get("name", "Unknown")})
-            students = supabase.table("students").select("id, display_name, student_number").eq("class_id", c["id"]).execute()
+            students = supabase.table("students").select("id, display_name, student_number").eq("class_id", c["id"]).eq("deleted", False).execute()
             linked = supabase.table("student_parents").select("student_id").execute()
             linked_ids = [row["student_id"] for row in linked.data] if linked.data else []
             student_list = []
@@ -77,12 +79,13 @@ async def list_classes_detailed(admin=Depends(require_admin)):
 # ==================== SUBJECTS ====================
 @router.get("/subjects/")
 async def list_subjects(admin=Depends(require_admin)):
-    res = supabase.table("subjects").select("*").execute()
+    """List all non-deleted subjects"""
+    res = supabase.table("subjects").select("*").eq("deleted", False).execute()
     return res.data
 
 @router.post("/subjects/")
 async def create_subject(name: str, admin=Depends(require_admin)):
-    res = supabase.table("subjects").insert({"name": name}).execute()
+    res = supabase.table("subjects").insert({"name": name, "deleted": False}).execute()
     if res.data:
         return res.data[0]
     raise HTTPException(500, detail="Failed to create subject")
@@ -140,7 +143,8 @@ async def permanent_delete_subject(subject_id: str, admin=Depends(require_admin)
 # ==================== TEACHERS ====================
 @router.get("/teachers/")
 async def list_teachers(admin=Depends(require_admin)):
-    res = supabase.table("profiles").select("id, full_name").eq("role", "teacher").execute()
+    """List all non-deleted teachers"""
+    res = supabase.table("profiles").select("id, full_name").eq("role", "teacher").eq("deleted", False).execute()
     return res.data
 
 @router.post("/teachers/")
@@ -150,7 +154,7 @@ async def create_teacher(email: str, password: str, full_name: str, admin=Depend
     except Exception as e:
         raise HTTPException(400, detail=str(e))
     user_id = auth_res.user.id
-    supabase.table("profiles").insert({"id": user_id, "full_name": full_name, "role": "teacher"}).execute()
+    supabase.table("profiles").insert({"id": user_id, "full_name": full_name, "role": "teacher", "deleted": False}).execute()
     return {"user_id": user_id, "email": email}
 
 @router.delete("/teachers/{teacher_id}/")
@@ -170,8 +174,9 @@ async def update_teacher(teacher_id: str, full_name: str, admin=Depends(require_
 
 @router.get("/teachers/detailed/")
 async def list_teachers_detailed(admin=Depends(require_admin)):
+    """List all non-deleted teachers with details"""
     try:
-        teachers = supabase.table("profiles").select("id, full_name").eq("role", "teacher").execute()
+        teachers = supabase.table("profiles").select("id, full_name").eq("role", "teacher").eq("deleted", False).execute()
         result = []
         for t in teachers.data:
             email = None
@@ -183,7 +188,7 @@ async def list_teachers_detailed(admin=Depends(require_admin)):
             classes = []
             for a in assignments.data:
                 try:
-                    students = supabase.table("students").select("id").eq("class_id", a["class_id"]).execute()
+                    students = supabase.table("students").select("id").eq("class_id", a["class_id"]).eq("deleted", False).execute()
                     student_count = len(students.data) if students.data else 0
                 except Exception: student_count = 0
                 classes.append({"class_name": a.get("classes", {}).get("name", "Unknown"), "subject_name": a.get("subjects", {}).get("name", "Unknown"), "student_count": student_count})
@@ -196,7 +201,8 @@ async def list_teachers_detailed(admin=Depends(require_admin)):
 # ==================== PARENTS ====================
 @router.get("/parents/")
 async def list_parents(admin=Depends(require_admin)):
-    res = supabase.table("profiles").select("id, full_name").eq("role", "parent").execute()
+    """List all non-deleted parents"""
+    res = supabase.table("profiles").select("id, full_name").eq("role", "parent").eq("deleted", False).execute()
     return res.data
 
 @router.post("/parents/")
@@ -206,7 +212,7 @@ async def create_parent(email: str, password: str, full_name: str, admin=Depends
     except Exception as e:
         raise HTTPException(400, detail=str(e))
     user_id = auth_res.user.id
-    supabase.table("profiles").insert({"id": user_id, "full_name": full_name, "role": "parent"}).execute()
+    supabase.table("profiles").insert({"id": user_id, "full_name": full_name, "role": "parent", "deleted": False}).execute()
     existing_parent = supabase.table("parents").select("id").eq("profile_id", user_id).execute()
     if not existing_parent.data:
         supabase.table("parents").insert({"profile_id": user_id}).execute()
@@ -228,8 +234,9 @@ async def update_parent(parent_id: str, full_name: str, admin=Depends(require_ad
 
 @router.get("/parents/detailed/")
 async def list_parents_detailed(admin=Depends(require_admin)):
+    """List all non-deleted parents with details"""
     try:
-        parents = supabase.table("profiles").select("id, full_name").eq("role", "parent").execute()
+        parents = supabase.table("profiles").select("id, full_name").eq("role", "parent").eq("deleted", False).execute()
         result = []
         for p in parents.data:
             email = None
@@ -244,11 +251,11 @@ async def list_parents_detailed(admin=Depends(require_admin)):
                     parent_db_id = parent_rec.data[0]["id"]
                     links = supabase.table("student_parents").select("student_id").eq("parent_id", parent_db_id).execute()
                     for link in links.data:
-                        student = supabase.table("students").select("id, display_name, student_number, class_id").eq("id", link["student_id"]).single().execute()
+                        student = supabase.table("students").select("id, display_name, student_number, class_id").eq("id", link["student_id"]).eq("deleted", False).single().execute()
                         if student.data:
                             class_name = "No class"
                             try:
-                                class_data = supabase.table("classes").select("name").eq("id", student.data["class_id"]).single().execute()
+                                class_data = supabase.table("classes").select("name").eq("id", student.data["class_id"]).eq("deleted", False).single().execute()
                                 if class_data.data: class_name = class_data.data["name"]
                             except Exception: pass
                             students.append({"id": student.data["id"], "display_name": student.data["display_name"], "student_number": student.data["student_number"], "class_name": class_name})
@@ -284,12 +291,14 @@ async def list_assignments(admin=Depends(require_admin)):
 # ==================== STUDENTS ====================
 @router.get("/students/")
 async def list_all_students(admin=Depends(require_admin)):
-    res = supabase.table("students").select("id, student_number, display_name, class_id").execute()
+    """List all non-deleted students"""
+    res = supabase.table("students").select("id, student_number, display_name, class_id").eq("deleted", False).execute()
     return res.data
 
 @router.get("/students/unassigned/")
 async def list_unassigned_students(admin=Depends(require_admin)):
-    all_students = supabase.table("students").select("id, student_number, display_name").execute()
+    """List all non-deleted unassigned students"""
+    all_students = supabase.table("students").select("id, student_number, display_name").eq("deleted", False).execute()
     linked = supabase.table("student_parents").select("student_id").execute()
     linked_ids = [row["student_id"] for row in linked.data] if linked.data else []
     unassigned = [s for s in all_students.data if s["id"] not in linked_ids]
@@ -317,9 +326,9 @@ async def update_student(student_id: str, display_name: str = None, student_numb
 async def link_student_parent(student_id: str, parent_id: str, admin: dict = Depends(require_admin)):
     try:
         logger.info(f"Linking student {student_id} to parent {parent_id}")
-        student = supabase.table("students").select("id").eq("id", student_id).execute()
+        student = supabase.table("students").select("id").eq("id", student_id).eq("deleted", False).execute()
         if not student.data: raise HTTPException(404, detail="Student not found")
-        profile = supabase.table("profiles").select("id, role, full_name").eq("id", parent_id).eq("role", "parent").execute()
+        profile = supabase.table("profiles").select("id, role, full_name").eq("id", parent_id).eq("role", "parent").eq("deleted", False).execute()
         if not profile.data: raise HTTPException(404, detail="Parent not found or user is not a parent")
         parent_rec = supabase.table("parents").select("id").eq("profile_id", parent_id).execute()
         if not parent_rec.data:
@@ -349,9 +358,9 @@ async def unlink_student_parent(student_id: str, parent_id: str, admin=Depends(r
 @router.get("/stats/")
 async def stats(admin=Depends(require_admin)):
     try:
-        classes = supabase.table("classes").select("id", count="exact").execute()
-        students = supabase.table("students").select("id", count="exact").execute()
-        teachers = supabase.table("profiles").select("id", count="exact").eq("role", "teacher").execute()
+        classes = supabase.table("classes").select("id", count="exact").eq("deleted", False).execute()
+        students = supabase.table("students").select("id", count="exact").eq("deleted", False).execute()
+        teachers = supabase.table("profiles").select("id", count="exact").eq("role", "teacher").eq("deleted", False).execute()
         materials = supabase.table("materials").select("id", count="exact").execute()
         return {
             "classes": classes.count if hasattr(classes, 'count') else len(classes.data),
@@ -413,59 +422,186 @@ async def get_trash_items(admin=Depends(require_admin)):
     """Get all soft-deleted items"""
     items = []
     
-    # Get deleted classes
-    classes = supabase.table("classes").select("*").eq("deleted", True).execute()
-    for c in classes.data:
-        items.append({
-            "id": c["id"],
-            "name": c.get("name", "Unknown"),
-            "type": "class",
-            "deleted_at": c.get("deleted_at"),
-            "metadata": {"grade": c.get("grade")}
-        })
-    
-    # Get deleted subjects
-    subjects = supabase.table("subjects").select("*").eq("deleted", True).execute()
-    for s in subjects.data:
-        items.append({
-            "id": s["id"],
-            "name": s.get("name", "Unknown"),
-            "type": "subject",
-            "deleted_at": s.get("deleted_at")
-        })
-    
-    # Get deleted teachers
-    teachers = supabase.table("profiles").select("*").eq("role", "teacher").eq("deleted", True).execute()
-    for t in teachers.data:
-        items.append({
-            "id": t["id"],
-            "name": t.get("full_name", "Unknown"),
-            "type": "teacher",
-            "deleted_at": t.get("deleted_at")
-        })
-    
-    # Get deleted parents
-    parents = supabase.table("profiles").select("*").eq("role", "parent").eq("deleted", True).execute()
-    for p in parents.data:
-        items.append({
-            "id": p["id"],
-            "name": p.get("full_name", "Unknown"),
-            "type": "parent",
-            "deleted_at": p.get("deleted_at")
-        })
-    
-    # Get deleted students
-    students = supabase.table("students").select("*").eq("deleted", True).execute()
-    for s in students.data:
-        items.append({
-            "id": s["id"],
-            "name": s.get("display_name", "Unknown"),
-            "type": "student",
-            "deleted_at": s.get("deleted_at"),
-            "metadata": {"student_number": s.get("student_number")}
-        })
-    
-    # Sort by deleted_at (most recent first)
-    items.sort(key=lambda x: x.get("deleted_at", ""), reverse=True)
-    
-    return items
+    try:
+        # Get deleted classes - only where deleted=True
+        classes = supabase.table("classes").select("*").eq("deleted", True).execute()
+        for c in classes.data:
+            items.append({
+                "id": c["id"],
+                "name": c.get("name", "Unknown"),
+                "type": "class",
+                "deleted_at": c.get("deleted_at"),
+                "metadata": {"grade": c.get("grade")}
+            })
+        
+        # Get deleted subjects - only where deleted=True
+        subjects = supabase.table("subjects").select("*").eq("deleted", True).execute()
+        for s in subjects.data:
+            items.append({
+                "id": s["id"],
+                "name": s.get("name", "Unknown"),
+                "type": "subject",
+                "deleted_at": s.get("deleted_at")
+            })
+        
+        # Get deleted teachers - only where deleted=True AND role=teacher
+        teachers = supabase.table("profiles").select("*").eq("role", "teacher").eq("deleted", True).execute()
+        for t in teachers.data:
+            items.append({
+                "id": t["id"],
+                "name": t.get("full_name", "Unknown"),
+                "type": "teacher",
+                "deleted_at": t.get("deleted_at"),
+                "metadata": {"email": t.get("email", "N/A")}
+            })
+        
+        # Get deleted parents - only where deleted=True AND role=parent
+        parents = supabase.table("profiles").select("*").eq("role", "parent").eq("deleted", True).execute()
+        for p in parents.data:
+            items.append({
+                "id": p["id"],
+                "name": p.get("full_name", "Unknown"),
+                "type": "parent",
+                "deleted_at": p.get("deleted_at"),
+                "metadata": {"email": p.get("email", "N/A")}
+            })
+        
+        # Get deleted students - only where deleted=True
+        students = supabase.table("students").select("*").eq("deleted", True).execute()
+        for s in students.data:
+            items.append({
+                "id": s["id"],
+                "name": s.get("display_name", "Unknown"),
+                "type": "student",
+                "deleted_at": s.get("deleted_at"),
+                "metadata": {"student_number": s.get("student_number")}
+            })
+        
+        # Sort by deleted_at (most recent first)
+        items.sort(key=lambda x: x.get("deleted_at", ""), reverse=True)
+        
+        return items
+    except Exception as e:
+        logger.error(f"Error fetching trash items: {e}")
+        return []
+
+# ==================== TEACHER SOFT DELETE ====================
+@router.delete("/teachers/{teacher_id}/soft-delete/")
+async def soft_delete_teacher(teacher_id: str, admin=Depends(require_admin)):
+    """Soft delete a teacher (mark as deleted)"""
+    try:
+        supabase.table("profiles").update({
+            "deleted": True,
+            "deleted_at": datetime.utcnow().isoformat()
+        }).eq("id", teacher_id).eq("role", "teacher").execute()
+        return {"message": "Teacher moved to trash"}
+    except Exception as e:
+        logger.error(f"Error soft deleting teacher: {e}")
+        raise HTTPException(500, detail=str(e))
+
+@router.put("/teachers/{teacher_id}/restore/")
+async def restore_teacher(teacher_id: str, admin=Depends(require_admin)):
+    """Restore a soft-deleted teacher"""
+    try:
+        supabase.table("profiles").update({
+            "deleted": False,
+            "deleted_at": None
+        }).eq("id", teacher_id).eq("role", "teacher").execute()
+        return {"message": "Teacher restored"}
+    except Exception as e:
+        logger.error(f"Error restoring teacher: {e}")
+        raise HTTPException(500, detail=str(e))
+
+@router.delete("/teachers/{teacher_id}/permanent/")
+async def permanent_delete_teacher(teacher_id: str, admin=Depends(require_admin)):
+    """Permanently delete a teacher"""
+    try:
+        # Remove class_teachers assignments
+        supabase.table("class_teachers").delete().eq("teacher_id", teacher_id).execute()
+        # Delete profile
+        supabase.table("profiles").delete().eq("id", teacher_id).eq("role", "teacher").execute()
+        return {"message": "Teacher permanently deleted"}
+    except Exception as e:
+        logger.error(f"Error permanently deleting teacher: {e}")
+        raise HTTPException(500, detail=str(e))
+
+# ==================== PARENT SOFT DELETE ====================
+@router.delete("/parents/{parent_id}/soft-delete/")
+async def soft_delete_parent(parent_id: str, admin=Depends(require_admin)):
+    """Soft delete a parent (mark as deleted)"""
+    try:
+        supabase.table("profiles").update({
+            "deleted": True,
+            "deleted_at": datetime.utcnow().isoformat()
+        }).eq("id", parent_id).eq("role", "parent").execute()
+        return {"message": "Parent moved to trash"}
+    except Exception as e:
+        logger.error(f"Error soft deleting parent: {e}")
+        raise HTTPException(500, detail=str(e))
+
+@router.put("/parents/{parent_id}/restore/")
+async def restore_parent(parent_id: str, admin=Depends(require_admin)):
+    """Restore a soft-deleted parent"""
+    try:
+        supabase.table("profiles").update({
+            "deleted": False,
+            "deleted_at": None
+        }).eq("id", parent_id).eq("role", "parent").execute()
+        return {"message": "Parent restored"}
+    except Exception as e:
+        logger.error(f"Error restoring parent: {e}")
+        raise HTTPException(500, detail=str(e))
+
+@router.delete("/parents/{parent_id}/permanent/")
+async def permanent_delete_parent(parent_id: str, admin=Depends(require_admin)):
+    """Permanently delete a parent"""
+    try:
+        parent_rec = supabase.table("parents").select("id").eq("profile_id", parent_id).execute()
+        if parent_rec.data:
+            supabase.table("student_parents").delete().eq("parent_id", parent_rec.data[0]["id"]).execute()
+            supabase.table("parents").delete().eq("profile_id", parent_id).execute()
+        supabase.table("profiles").delete().eq("id", parent_id).eq("role", "parent").execute()
+        return {"message": "Parent permanently deleted"}
+    except Exception as e:
+        logger.error(f"Error permanently deleting parent: {e}")
+        raise HTTPException(500, detail=str(e))
+
+# ==================== STUDENT SOFT DELETE ====================
+@router.delete("/students/{student_id}/soft-delete/")
+async def soft_delete_student(student_id: str, admin=Depends(require_admin)):
+    """Soft delete a student (mark as deleted)"""
+    try:
+        supabase.table("students").update({
+            "deleted": True,
+            "deleted_at": datetime.utcnow().isoformat()
+        }).eq("id", student_id).execute()
+        return {"message": "Student moved to trash"}
+    except Exception as e:
+        logger.error(f"Error soft deleting student: {e}")
+        raise HTTPException(500, detail=str(e))
+
+@router.put("/students/{student_id}/restore/")
+async def restore_student(student_id: str, admin=Depends(require_admin)):
+    """Restore a soft-deleted student"""
+    try:
+        supabase.table("students").update({
+            "deleted": False,
+            "deleted_at": None
+        }).eq("id", student_id).execute()
+        return {"message": "Student restored"}
+    except Exception as e:
+        logger.error(f"Error restoring student: {e}")
+        raise HTTPException(500, detail=str(e))
+
+@router.delete("/students/{student_id}/permanent/")
+async def permanent_delete_student(student_id: str, admin=Depends(require_admin)):
+    """Permanently delete a student"""
+    try:
+        supabase.table("student_parents").delete().eq("student_id", student_id).execute()
+        supabase.table("submissions").delete().eq("student_id", student_id).execute()
+        supabase.table("student_responses").delete().eq("student_id", student_id).execute()
+        supabase.table("students").delete().eq("id", student_id).execute()
+        return {"message": "Student permanently deleted"}
+    except Exception as e:
+        logger.error(f"Error permanently deleting student: {e}")
+        raise HTTPException(500, detail=str(e))

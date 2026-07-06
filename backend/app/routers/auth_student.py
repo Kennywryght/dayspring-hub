@@ -1,3 +1,4 @@
+# app/routers/auth_student.py
 from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -56,13 +57,13 @@ def validate_password_strength(password: str) -> tuple:
     return len(errors) == 0, errors
 
 # --- Login Endpoint ---
-# In auth_student.py - replace the login endpoint
 @router.post("/login/")
 async def student_login(data: StudentLogin):
     try:
         logger.info(f"Login attempt for student: {data.student_number}")
         
-        student_res = supabase.table("students").select("id, password_hash, display_name, class_id, grade, email").eq("student_number", data.student_number).execute()
+        # REMOVED: email from select - students table doesn't have email column
+        student_res = supabase.table("students").select("id, password_hash, display_name, class_id, grade").eq("student_number", data.student_number).execute()
         
         if not student_res.data:
             logger.warning(f"Student not found: {data.student_number}")
@@ -86,12 +87,12 @@ async def student_login(data: StudentLogin):
             logger.error(f"Password verification error: {e}")
             raise HTTPException(status_code=401, detail="Invalid student number or password")
 
+        # Generate JWT
         payload = {
             "sub": student["id"],
             "role": "student",
             "class_id": student.get("class_id"),
             "display_name": student.get("display_name"),
-            "email": student.get("email"),
             "exp": datetime.now(timezone.utc) + timedelta(hours=8)
         }
         token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -104,8 +105,7 @@ async def student_login(data: StudentLogin):
                 "role": "student",
                 "display_name": student.get("display_name"),
                 "class_id": student.get("class_id"),
-                "grade": student.get("grade"),
-                "email": student.get("email")
+                "grade": student.get("grade")
             }
         }
     except HTTPException:
@@ -113,6 +113,7 @@ async def student_login(data: StudentLogin):
     except Exception as e:
         logger.error(f"Student login error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Login error: {str(e)}")
+
 # --- Password Reset Endpoints ---
 @router.post("/forgot-password")
 async def forgot_password(
@@ -129,7 +130,7 @@ async def forgot_password(
     
     try:
         # Check if student exists with this email
-        student = supabase.table("students").select("id, display_name, email").eq("email", forgot_request.email).execute()
+        student = supabase.table("students").select("id, display_name").eq("email", forgot_request.email).execute()
         
         if not student.data:
             await audit_log(
