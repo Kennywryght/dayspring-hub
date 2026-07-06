@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from app.config import JWT_SECRET, JWT_ALGORITHM
@@ -6,7 +6,7 @@ from app.database import supabase
 
 security = HTTPBearer()
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
     # strip any accidental quotes or whitespace from the token
     token = credentials.credentials.strip().strip('"').strip("'")
 
@@ -20,14 +20,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                 "role": "student",
                 "class_id": payload.get("class_id"),
                 "display_name": payload.get("display_name"),
-                "student_id": payload["sub"]
+                "student_id": payload["sub"],
+                "email": payload.get("email")
             }
         elif role == "parent":
             return {
                 "user_id": payload["sub"],
                 "role": "parent",
                 "parent_id": payload.get("parent_id"),
-                "student_ids": payload.get("student_ids", [])
+                "student_ids": payload.get("student_ids", []),
+                "email": payload.get("email")
             }
         else:
             raise HTTPException(status_code=401, detail="Unknown role")
@@ -48,7 +50,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                 return {
                     "user_id": user.id,
                     "role": "super_admin",
-                    "full_name": full_name
+                    "full_name": full_name,
+                    "email": user.email
                 }
             elif role == "teacher":
                 # Get all class_ids from class_teachers table
@@ -63,7 +66,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                     "user_id": user.id,
                     "role": "teacher",
                     "class_ids": class_ids,
-                    "full_name": full_name
+                    "full_name": full_name,
+                    "email": user.email
                 }
             else:
                 raise HTTPException(status_code=403, detail="Not authorised")
@@ -71,3 +75,24 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             raise
         except Exception:
             raise HTTPException(status_code=401, detail="Could not validate credentials")
+
+
+async def get_current_user_optional(request: Request):
+    """Get current user from JWT token (optional)"""
+    try:
+        auth_header = request.headers.get("Authorization")
+        if not auth_header:
+            return None
+        
+        # Create a mock credentials object
+        class MockCredentials:
+            def __init__(self, token):
+                self.credentials = token
+        
+        token = auth_header.replace("Bearer ", "").strip().strip('"').strip("'")
+        credentials = MockCredentials(token)
+        
+        # Use the same logic as get_current_user
+        return await get_current_user(request, credentials)
+    except Exception:
+        return None

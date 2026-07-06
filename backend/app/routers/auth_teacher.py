@@ -5,6 +5,7 @@ from app.database import supabase
 from app.utils.auth import get_current_user
 from app.utils.rate_limiter import rate_limiter
 from app.utils.audit_logger import audit_log
+from app.config import FRONTEND_URL 
 import logging
 import os
 import re

@@ -5,8 +5,8 @@ from app.database import supabase
 from app.utils.auth import get_current_user
 from app.utils.rate_limiter import rate_limiter
 from app.utils.audit_logger import audit_log
+from app.config import FRONTEND_URL  # ✅ Import from config
 import logging
-import os
 import re
 from datetime import datetime, timedelta
 import secrets
@@ -117,11 +117,11 @@ async def forgot_password(
                 "created_at": datetime.utcnow().isoformat()
             }).execute()
         except Exception:
-            frontend_url = os.getenv("FRONTEND_URL", "https://dayspring-hub.vercel.app")
+            # Use FRONTEND_URL from config
             supabase.auth.admin.generate_link(
                 "recovery",
                 forgot_request.email,
-                {"redirect_to": f"{frontend_url}/reset-password"}
+                {"redirect_to": f"{FRONTEND_URL}/reset-password"}
             )
         
         await audit_log(
