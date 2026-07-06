@@ -1,6 +1,6 @@
 # app/routers/quiz.py
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, HTMLResponse
 from app.database import supabase
 from app.utils.auth import get_current_user
 from typing import Optional, List
@@ -660,6 +660,14 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
         
         for r in sorted_responses:
             q_data = r.get("questions", {})
+            
+            # FIX: Determine if the answer is correct based on points
+            is_correct = False
+            if r.get("points") is not None:
+                # If points > 0, it's correct
+                if float(r.get("points", 0)) > 0:
+                    is_correct = True
+            
             answer_data = {
                 "question_id": r["question_id"],
                 "question_text": q_data.get("question_text", ""),
@@ -668,7 +676,7 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
                 "feedback": r.get("feedback"),
                 "text_answer": r.get("text_answer"),
                 "selected_option_id": r.get("selected_option_id"),
-                "is_correct": r.get("is_correct"),
+                "is_correct": is_correct,  # FIX: This now properly sets is_correct
             }
             
             # If multiple choice, get option text and correct answer
@@ -718,7 +726,7 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
 
 @router.get("/{quiz_id}/export-result")
 async def export_quiz_result(quiz_id: int, user=Depends(get_current_user)):
-    """Export student's quiz result as PDF"""
+    """Export student's quiz result as HTML report that can be printed/saved as PDF"""
     if user["role"] != "student":
         raise HTTPException(status_code=403, detail="Only students can export results")
     
@@ -729,108 +737,134 @@ async def export_quiz_result(quiz_id: int, user=Depends(get_current_user)):
         if not result.get("submitted"):
             raise HTTPException(status_code=400, detail="You haven't submitted this quiz yet")
         
-        # Generate HTML report
+        # Calculate percentage
         total_possible = result.get("total_possible", 1)
         percentage = round((result.get("total_points", 0) / total_possible) * 100) if total_possible > 0 else 0
         
+        # Get student info
+        student = supabase.table("students").select("display_name, student_number").eq("id", user["user_id"]).single().execute()
+        student_name = student.data.get("display_name", "Student") if student.data else "Student"
+        student_number = student.data.get("student_number", "N/A") if student.data else "N/A"
+        
+        # Build HTML report
         html = f"""
         <!DOCTYPE html>
         <html>
         <head>
+            <meta charset="UTF-8">
             <title>Quiz Results - {result['quiz_title']}</title>
             <style>
-                body {{ font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }}
-                h1 {{ color: #1a365d; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }}
-                .header {{ background: #f7fafc; padding: 20px; border-radius: 8px; margin-bottom: 20px; }}
-                .score {{ font-size: 28px; font-weight: bold; color: #2d3748; }}
-                .correct {{ color: #166534; }}
-                .incorrect {{ color: #991b1b; }}
-                .question {{ background: #f7fafc; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid #4299e1; }}
-                .question.correct {{ border-left-color: #48bb78; background: #f0fff4; }}
-                .question.incorrect {{ border-left-color: #fc8181; background: #fff5f5; }}
-                .question.unanswered {{ border-left-color: #ecc94b; }}
-                .meta {{ color: #4a5568; font-size: 14px; }}
-                .points {{ font-weight: bold; }}
-                .status-badge {{ display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }}
-                .status-correct {{ background: #c6f6d5; color: #22543d; }}
-                .status-incorrect {{ background: #fed7d7; color: #742a2a; }}
-                .status-pending {{ background: #fefcbf; color: #744210; }}
-                .footer {{ margin-top: 30px; font-size: 12px; color: #a0aec0; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 20px; }}
-                .answer-text {{ background: white; padding: 8px 12px; border-radius: 4px; border: 1px solid #e2e8f0; margin: 5px 0; }}
+                body {{ font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; background: #f8fafc; }}
+                .container {{ background: white; padding: 40px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+                h1 {{ color: #1e293b; border-bottom: 3px solid #e2e8f0; padding-bottom: 15px; }}
+                .header {{ background: #f1f5f9; padding: 20px; border-radius: 12px; margin-bottom: 25px; }}
+                .score {{ font-size: 32px; font-weight: 700; color: #0f172a; }}
+                .meta {{ color: #64748b; font-size: 14px; margin-top: 10px; }}
+                .meta span {{ margin-right: 20px; }}
+                .question {{ background: #f8fafc; padding: 18px; margin: 12px 0; border-radius: 10px; border-left: 4px solid #3b82f6; }}
+                .question.correct {{ border-left-color: #22c55e; background: #f0fdf4; }}
+                .question.incorrect {{ border-left-color: #ef4444; background: #fef2f2; }}
+                .question.pending {{ border-left-color: #eab308; background: #fefce8; }}
+                .badge {{ display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }}
+                .badge-correct {{ background: #dcfce7; color: #166534; }}
+                .badge-incorrect {{ background: #fee2e2; color: #991b1b; }}
+                .badge-pending {{ background: #fef9c3; color: #854d0e; }}
+                .answer-box {{ background: white; padding: 8px 14px; border-radius: 6px; border: 1px solid #e2e8f0; margin: 5px 0; display: inline-block; }}
+                .points {{ font-weight: 600; }}
+                .points-correct {{ color: #16a34a; }}
+                .points-incorrect {{ color: #dc2626; }}
+                .footer {{ margin-top: 30px; font-size: 12px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 20px; }}
+                .student-info {{ background: #f1f5f9; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; flex-wrap: wrap; }}
+                .student-info div {{ font-size: 14px; color: #334155; }}
+                .student-info strong {{ color: #0f172a; }}
+                @media print {{
+                    body {{ background: white; padding: 20px; }}
+                    .container {{ box-shadow: none; padding: 20px; }}
+                    .header {{ background: #f1f5f9; }}
+                }}
             </style>
         </head>
         <body>
-            <h1>📝 Quiz Results: {result['quiz_title']}</h1>
-            
-            <div class="header">
-                <div class="score">Score: {result['total_points']} / {result['total_possible']} ({percentage}%)</div>
-                <div class="meta">
-                    <p>📊 Questions graded: {result['graded_count']} / {result['total_questions']}</p>
-                    <p>🤖 Auto-graded: {'Yes' if result.get('auto_graded') else 'No'}</p>
-                    <p>📅 Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}</p>
+            <div class="container">
+                <h1>📝 Quiz Results: {result['quiz_title']}</h1>
+                
+                <div class="student-info">
+                    <div><strong>Student:</strong> {student_name}</div>
+                    <div><strong>Student Number:</strong> {student_number}</div>
                 </div>
-            </div>
-            
-            <h2>Question Breakdown</h2>
+                
+                <div class="header">
+                    <div class="score">Score: {result['total_points']} / {result['total_possible']} ({percentage}%)</div>
+                    <div class="meta">
+                        <span>📊 Questions graded: {result['graded_count']} / {result['total_questions']}</span>
+                        <span>🤖 Auto-graded: {'Yes' if result.get('auto_graded') else 'No'}</span>
+                        <span>📅 Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}</span>
+                    </div>
+                </div>
+                
+                <h2>Question Breakdown</h2>
         """
         
         for i, ans in enumerate(result.get("answers", [])):
             # Determine status
-            if ans.get("is_correct") is True:
+            is_correct = ans.get("is_correct")
+            
+            if is_correct is True:
                 status_class = "correct"
                 status_text = "✅ Correct"
-                status_badge = "status-correct"
-            elif ans.get("is_correct") is False:
+                badge_class = "badge-correct"
+            elif is_correct is False:
                 status_class = "incorrect"
                 status_text = "❌ Incorrect"
-                status_badge = "status-incorrect"
+                badge_class = "badge-incorrect"
             else:
-                status_class = "unanswered"
+                status_class = "pending"
                 status_text = "⏳ Not graded"
-                status_badge = "status-pending"
+                badge_class = "badge-pending"
             
             points_display = ans.get('points') if ans.get('points') is not None else 'N/A'
+            points_class = "points-correct" if is_correct is True else "points-incorrect" if is_correct is False else ""
+            
+            # Get answer text
+            answer_text = ans.get('selected_option_text') or ans.get('text_answer') or 'No answer provided'
             
             html += f"""
-            <div class="question {status_class}">
-                <p><strong>Q{i+1}: {ans['question_text']}</strong></p>
-                <p><strong>Type:</strong> {ans['question_type'].replace('_', ' ').title()}</p>
-                <p><strong>Your answer:</strong> 
-                    <span class="answer-text">{ans.get('selected_option_text') or ans.get('text_answer') or 'No answer provided'}</span>
-                </p>
+                <div class="question {status_class}">
+                    <p><strong>Q{i+1}: {ans['question_text']}</strong></p>
+                    <p><strong>Your answer:</strong> <span class="answer-box">{answer_text}</span></p>
             """
             
             if ans.get('correct_answer'):
                 html += f"""
-                <p><strong>Correct answer:</strong> 
-                    <span class="answer-text" style="background:#f0fff4;">{ans['correct_answer']}</span>
-                </p>
+                    <p><strong>Correct answer:</strong> <span class="answer-box" style="background:#f0fdf4;border-color:#86efac;">{ans['correct_answer']}</span></p>
                 """
             
             html += f"""
-                <p><strong>Points:</strong> <span class="points">{points_display}</span></p>
-                <p><span class="status-badge {status_badge}">{status_text}</span></p>
+                    <p>
+                        <span class="badge {badge_class}">{status_text}</span>
+                        <span class="points {points_class}"> | Points: {points_display}</span>
+                    </p>
             """
             
             if ans.get('feedback'):
                 html += f"""
-                <p><strong>Feedback:</strong> {ans['feedback']}</p>
+                    <p><strong>Feedback:</strong> {ans['feedback']}</p>
                 """
             
             html += "</div>"
         
         html += """
-            <div class="footer">
-                <p>Generated by Dayspring Hub Learning Platform</p>
+                <div class="footer">
+                    <p>Generated by Dayspring Hub Learning Platform</p>
+                </div>
             </div>
         </body>
         </html>
         """
         
         # Return HTML response with proper headers
-        return Response(
+        return HTMLResponse(
             content=html,
-            media_type="text/html",
             headers={
                 "Content-Disposition": f"attachment; filename=quiz_results_{quiz_id}.html",
                 "Access-Control-Expose-Headers": "Content-Disposition"
