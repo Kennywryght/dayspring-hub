@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import LandingPage from './pages/LandingPage';
 import UnifiedLogin from './pages/UnifiedLogin';
 import ResetPassword from './pages/ResetPassword';
 import StudentDashboard from './pages/StudentDashboard';
@@ -25,28 +26,14 @@ function AppRoutes() {
   
   return (
     <Routes>
-      {/* Root path - redirect based on auth status */}
-      <Route 
-        path="/" 
-        element={
-          user ? (
-            // Redirect based on role
-            user.role === 'super_admin' ? <Navigate to="/admin" /> :
-            user.role === 'teacher' ? <Navigate to="/teacher" /> :
-            user.role === 'student' ? <Navigate to="/student" /> :
-            user.role === 'parent' ? <Navigate to="/parent" /> :
-            <Navigate to="/login" />
-          ) : (
-            <Navigate to="/login" />
-          )
-        } 
-      />
+      {/* Root path - Show Landing Page */}
+      <Route path="/" element={<LandingPage />} />
       
       {/* Auth routes */}
       <Route path="/login" element={<UnifiedLogin />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       
-      {/* Protected routes */}
+      {/* Protected routes - only accessible when logged in */}
       <Route path="/student" element={
         <ProtectedRoute allowedRoles={['student']}>
           <StudentDashboard />
@@ -70,6 +57,9 @@ function AppRoutes() {
           <AdminDashboard />
         </ProtectedRoute>
       } />
+      
+      {/* Catch all - redirect to home */}
+      <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
 }

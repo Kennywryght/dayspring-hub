@@ -109,7 +109,7 @@ export default function LandingPage() {
           <nav className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-xl overflow-hidden border-2 border-brass-200 dark:border-brass-500/30 shadow-soft flex-shrink-0">
-                <img src="/logo.jpg" alt="Dayspring Hub" className="w-full h-full object-cover" />
+                <img src="/logo.jpeg" alt="Dayspring Hub" className="w-full h-full object-cover" />
               </div>
               <span className="text-lg font-display font-semibold tracking-tight text-navy-800 dark:text-white">
                 Dayspring<span className="text-brass-600 dark:text-brass-400"> Hub</span>
