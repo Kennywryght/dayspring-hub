@@ -138,7 +138,6 @@ export default function StudentDashboard() {
     }
   };
 
-  // FIXED: startQuiz function - properly loads only the selected quiz
   const startQuiz = async (quizId) => {
     setLoadingQuizId(quizId);
     setLoadingQuiz(true);
@@ -156,17 +155,14 @@ export default function StudentDashboard() {
         const data = await res.json();
         console.log('Quiz data received:', data);
         
-        // Handle different response structures
         let quizData = data.quiz || data;
         let questionsData = data.questions || [];
         
-        // If the response has questions nested differently
         if (data.data) {
           quizData = data.data.quiz || data.data;
           questionsData = data.data.questions || [];
         }
         
-        // Ensure we have quiz data
         if (!quizData || !quizData.id) {
           showMsg('Invalid quiz data received', 'error');
           setLoadingQuizId(null);
@@ -174,7 +170,6 @@ export default function StudentDashboard() {
           return;
         }
         
-        // Ensure we have questions
         if (!questionsData || questionsData.length === 0) {
           showMsg('This quiz has no questions.', 'error');
           setLoadingQuizId(null);
@@ -182,12 +177,9 @@ export default function StudentDashboard() {
           return;
         }
         
-        // Set the active quiz - this will cause the conditional render to show the quiz interface
         setActiveQuiz(quizData);
         setQuizQuestions(questionsData);
         setResponses({});
-        
-        // Switch to quizzes tab to show the quiz interface
         setTab('quizzes');
         
         showMsg(`Quiz "${quizData.title}" loaded! Answer all questions and submit.`, 'success');
@@ -215,7 +207,6 @@ export default function StudentDashboard() {
   const submitQuiz = async () => {
     if (!activeQuiz) return;
     
-    // Check if all questions are answered
     const unansweredQuestions = quizQuestions.filter(q => {
       const response = responses[q.id];
       if (q.question_type === 'multiple_choice') {
@@ -250,11 +241,9 @@ export default function StudentDashboard() {
 
       if (res.ok) {
         showMsg('Quiz submitted successfully!');
-        // Reset quiz state
         setActiveQuiz(null);
         setQuizQuestions([]);
         setResponses({});
-        // Refresh data to get updated quiz status
         await fetchData();
       } else {
         const err = await res.json().catch(() => ({}));
@@ -276,14 +265,14 @@ export default function StudentDashboard() {
     }
   };
 
-  // FIXED: downloadQuizResults function - properly handles PDF download
+  // FIXED: Download results as HTML with print option
   const downloadQuizResults = async (quizId) => {
     setExportingResults(true);
     try {
       const response = await fetch(`${API_URL}quizzes/${quizId}/export-result`, {
         headers: { 
           Authorization: `Bearer ${user.access_token}`,
-          'Accept': 'application/pdf',
+          'Accept': 'text/html',
         }
       });
       
@@ -294,36 +283,22 @@ export default function StudentDashboard() {
         return;
       }
       
-      // Get the blob from response
-      const blob = await response.blob();
-      
-      // Check if it's actually a PDF
-      if (!blob.type.includes('pdf')) {
-        showMsg('The server returned an unexpected file type', 'error');
-        setExportingResults(false);
-        return;
-      }
-      
-      // Create a URL for the blob
+      const html = await response.text();
+      const blob = new Blob([html], { type: 'text/html' });
       const url = window.URL.createObjectURL(blob);
       
-      // Create a link element
       const link = document.createElement('a');
       link.href = url;
-      link.download = `quiz_results_${quizId}.pdf`;
-      link.target = '_blank';
-      
-      // Append to body, click, and remove
+      link.download = `quiz_results_${quizId}.html`;
       document.body.appendChild(link);
       link.click();
       
-      // Clean up after a delay
       setTimeout(() => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
       }, 100);
       
-      showMsg('Results downloaded successfully!', 'success');
+      showMsg('Results downloaded! Open the HTML file and use "Print > Save as PDF" to get a PDF.', 'success');
       
     } catch (err) {
       console.error('Download error:', err);
@@ -333,14 +308,14 @@ export default function StudentDashboard() {
     }
   };
 
-  // Alternative: view PDF in new tab
+  // FIXED: View results in new tab as HTML
   const viewQuizResults = async (quizId) => {
     setExportingResults(true);
     try {
       const response = await fetch(`${API_URL}quizzes/${quizId}/export-result`, {
         headers: { 
           Authorization: `Bearer ${user.access_token}`,
-          'Accept': 'application/pdf',
+          'Accept': 'text/html',
         }
       });
       
@@ -350,18 +325,17 @@ export default function StudentDashboard() {
         return;
       }
       
-      const blob = await response.blob();
+      const html = await response.text();
+      const blob = new Blob([html], { type: 'text/html' });
       const url = window.URL.createObjectURL(blob);
       
-      // Open in new tab
       window.open(url, '_blank');
       
-      // Clean up after a delay
       setTimeout(() => {
         window.URL.revokeObjectURL(url);
       }, 1000);
       
-      showMsg('Results opened in new tab', 'success');
+      showMsg('Results opened in new tab. Use "Print > Save as PDF" to download.', 'success');
     } catch (err) {
       console.error('View error:', err);
       showMsg('Failed to view results', 'error');
@@ -400,7 +374,6 @@ export default function StudentDashboard() {
     return quizSubmissions.some(s => s.quiz_id === quizId && s.submitted);
   };
 
-  // Grade status colors
   const getGradeColor = (percentage) => {
     if (percentage >= 70) return 'text-forest-600 dark:text-forest-500';
     if (percentage >= 40) return 'text-brass-600 dark:text-brass-400';
@@ -413,7 +386,6 @@ export default function StudentDashboard() {
     return 'bg-oxbrick-50 dark:bg-oxbrick-700/20';
   };
 
-  // Home tab data
   const totalAssignments = assignments.length;
   const submittedAssignments = Object.values(submissionStatus).filter(s => s === 'submitted').length;
   const gradedAssignments = Object.values(assignmentResults).filter(r => r?.grade).length;
@@ -448,7 +420,6 @@ export default function StudentDashboard() {
     </div>
   );
 
-  // If a quiz is active, show the quiz taking interface
   if (activeQuiz) {
     return (
       <Layout role="student" navLinks={navLinks}>
@@ -553,7 +524,6 @@ export default function StudentDashboard() {
     );
   }
 
-  // Main dashboard view (when no quiz is active)
   return (
     <Layout role="student" navLinks={navLinks}>
       <div className="mb-8 animate-fade-in-up">
@@ -575,7 +545,7 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      {/* ===== QUIZ RESULT DETAIL MODAL ===== */}
+      {/* QUIZ RESULT DETAIL MODAL */}
       {viewingResult && (
         <div className="fixed inset-0 bg-navy-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-navy-800 rounded-3xl shadow-elevated max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6 md:p-8">
@@ -711,10 +681,9 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      {/* ===== HOME TAB ===== */}
+      {/* HOME TAB */}
       {tab === 'home' && (
         <div className="space-y-8 animate-fade-in-up">
-          {/* Quick stats */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="bg-navy-700 rounded-2xl p-5 shadow-card text-white">
               <div className="flex items-center justify-between mb-3">
@@ -753,7 +722,6 @@ export default function StudentDashboard() {
             </div>
           </div>
 
-          {/* Assignment Progress Section */}
           <div className="bg-white dark:bg-navy-800 rounded-2xl shadow-card border border-ink-200 dark:border-navy-600 p-6">
             <h3 className="text-xl font-display font-semibold text-navy-800 dark:text-white mb-4 flex items-center gap-2">
               <ClipboardList className="w-5 h-5 text-brass-500" strokeWidth={1.75} /> Assignment Progress
@@ -804,7 +772,6 @@ export default function StudentDashboard() {
             )}
           </div>
 
-          {/* Quiz Progress Section */}
           <div className="bg-white dark:bg-navy-800 rounded-2xl shadow-card border border-ink-200 dark:border-navy-600 p-6">
             <h3 className="text-xl font-display font-semibold text-navy-800 dark:text-white mb-4 flex items-center gap-2">
               <Brain className="w-5 h-5 text-brass-500" strokeWidth={1.75} /> Quiz Progress
@@ -902,7 +869,7 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      {/* Materials Tab */}
+      {/* MATERIALS TAB */}
       {tab === 'materials' && (
         <div className="space-y-8 animate-fade-in-up">
           <div className="flex items-center gap-3 mb-4">
@@ -939,7 +906,7 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      {/* Assignments Tab */}
+      {/* ASSIGNMENTS TAB */}
       {tab === 'assignments' && (
         <div className="space-y-8 animate-fade-in-up">
           <div className="flex items-center gap-3 mb-4">
@@ -1029,7 +996,7 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      {/* Announcements Tab */}
+      {/* ANNOUNCEMENTS TAB */}
       {tab === 'announcements' && (
         <div className="space-y-8 animate-fade-in-up">
           <div className="flex items-center gap-3 mb-4">
@@ -1052,7 +1019,7 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      {/* ===== QUIZZES TAB ===== */}
+      {/* QUIZZES TAB */}
       {tab === 'quizzes' && (
         <div className="space-y-8 animate-fade-in-up">
           <div className="flex items-center gap-3 mb-4">
@@ -1113,7 +1080,7 @@ export default function StudentDashboard() {
                                   disabled={exportingResults}
                                   className="flex-1 bg-navy-50 dark:bg-navy-700 text-navy-700 dark:text-ink-200 px-3 py-2 rounded-lg text-sm font-semibold hover:bg-navy-100 dark:hover:bg-navy-600 transition-colors flex items-center justify-center gap-2">
                                   <Eye className="w-3.5 h-3.5" strokeWidth={1.75} />
-                                  View PDF
+                                  View
                                 </button>
                               </div>
                             </div>
