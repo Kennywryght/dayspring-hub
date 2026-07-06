@@ -26,10 +26,25 @@ function AppRoutes() {
   
   return (
     <Routes>
-      {/* Root path - Show Landing Page */}
-      <Route path="/" element={<LandingPage />} />
+      {/* Root path - redirect based on auth status */}
+      <Route 
+        path="/" 
+        element={
+          user ? (
+            // User is logged in - redirect to their dashboard
+            user.role === 'super_admin' ? <Navigate to="/admin" /> :
+            user.role === 'teacher' ? <Navigate to="/teacher" /> :
+            user.role === 'student' ? <Navigate to="/student" /> :
+            user.role === 'parent' ? <Navigate to="/parent" /> :
+            <LandingPage />
+          ) : (
+            // User is not logged in - show landing page
+            <LandingPage />
+          )
+        } 
+      />
       
-      {/* Auth routes */}
+      {/* Auth routes - always accessible */}
       <Route path="/login" element={<UnifiedLogin />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       

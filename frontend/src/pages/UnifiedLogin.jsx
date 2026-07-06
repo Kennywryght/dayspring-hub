@@ -114,60 +114,88 @@ export default function UnifiedLogin() {
 
   // ===== LOGIN HANDLERS =====
   const handleTeacherLogin = async (e) => {
-    e.preventDefault(); setLoading(true); resetErrorState();
+    e.preventDefault(); 
+    setLoading(true); 
+    resetErrorState();
     try {
       const res = await fetch(`${API_URL}auth/teacher/login/`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: teacherEmail, password: teacherPassword }),
       });
       if (!res.ok) throw new Error('Invalid credentials');
       const data = await res.json();
       loginTeacher(data);
-      if (data.user.role === 'super_admin') navigate('/admin/dashboard');
-      else navigate('/teacher/dashboard');
-    } catch (err) { setError(err.message); } finally { setLoading(false); }
+      if (data.user.role === 'super_admin') navigate('/admin');
+      else navigate('/teacher');
+    } catch (err) { 
+      setError(err.message); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleStudentLogin = async (e) => {
-    e.preventDefault(); setLoading(true); resetErrorState();
+    e.preventDefault(); 
+    setLoading(true); 
+    resetErrorState();
     try {
       const res = await fetch(`${API_URL}auth/student/login/`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ student_number: studentNumber, password: studentPassword }),
       });
       if (!res.ok) throw new Error((await res.json()).detail || 'Invalid credentials');
       const data = await res.json();
       loginStudent(data);
-      navigate('/student/dashboard');
-    } catch (err) { setError(err.message); } finally { setLoading(false); }
+      navigate('/student');
+    } catch (err) { 
+      setError(err.message); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleParentLogin = async (e) => {
-    e.preventDefault(); setLoading(true); resetErrorState();
+    e.preventDefault(); 
+    setLoading(true); 
+    resetErrorState();
     try {
       const res = await fetch(`${API_URL}auth/parent/login/`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: parentEmail, password: parentPassword }),
       });
       if (!res.ok) throw new Error('Invalid credentials');
       const data = await res.json();
       loginParent(data);
-      navigate('/parent/dashboard');
-    } catch (err) { setError(err.message); } finally { setLoading(false); }
+      navigate('/parent');
+    } catch (err) { 
+      setError(err.message); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleAdminLogin = async (e) => {
-    e.preventDefault(); setLoading(true); resetErrorState();
+    e.preventDefault(); 
+    setLoading(true); 
+    resetErrorState();
     try {
       const res = await fetch(`${API_URL}auth/admin/login/`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: adminEmail, password: adminPassword }),
       });
       if (!res.ok) throw new Error((await res.json()).detail || 'Invalid credentials');
       const data = await res.json();
       loginAdmin(data);
-      navigate('/admin/dashboard');
-    } catch (err) { setError(err.message); } finally { setLoading(false); }
+      navigate('/admin');
+    } catch (err) { 
+      setError(err.message); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const roleConfig = {

@@ -7,7 +7,8 @@ function loadUser() {
     const token = localStorage.getItem('token');
     const userData = localStorage.getItem('user');
     if (token && userData) {
-      return { ...JSON.parse(userData), access_token: token };
+      const user = JSON.parse(userData);
+      return { ...user, access_token: token };
     }
   } catch (_) {}
   return null;
@@ -18,13 +19,26 @@ export function AuthProvider({ children }) {
 
   const login = (data) => {
     const cleanToken = (data.access_token || '').trim().replace(/^["']|["']$/g, '');
-    const role = data.user?.role || data.role || 'unknown';
-    const userData = { ...data.user, role, access_token: cleanToken };
+    
+    // ✅ Make sure we preserve the role from the response
+    const userData = {
+      id: data.user?.id,
+      role: data.user?.role || data.role || 'unknown',
+      email: data.user?.email,
+      full_name: data.user?.full_name || data.user?.display_name,
+      display_name: data.user?.display_name,
+      class_id: data.user?.class_id,
+      student_ids: data.user?.student_ids,
+      class_ids: data.user?.class_ids,
+      access_token: cleanToken
+    };
+    
     setUser(userData);
     localStorage.setItem('token', cleanToken);
-    localStorage.setItem('user', JSON.stringify({ ...data.user, role }));
+    localStorage.setItem('user', JSON.stringify(userData));
   };
 
+  // ✅ All login methods use the same function
   const loginTeacher = login;
   const loginStudent = login;
   const loginParent = login;
@@ -37,7 +51,15 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, loginTeacher, loginStudent, loginParent, loginAdmin, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      login, 
+      loginTeacher, 
+      loginStudent, 
+      loginParent, 
+      loginAdmin, 
+      logout 
+    }}>
       {children}
     </AuthContext.Provider>
   );
