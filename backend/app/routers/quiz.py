@@ -120,7 +120,9 @@ async def create_quiz(quiz_data: QuizCreate, user=Depends(get_current_user)):
                 }
                 for opt in q.options
             ]
-            supabase.table("options").insert(options_insert).execute()
+            logger.info(f"Creating options for question {question_id}: {options_insert}")
+            result = supabase.table("options").insert(options_insert).execute()
+            logger.info(f"Options created: {result.data}")
 
     return {
         "id": quiz_id,
@@ -443,10 +445,19 @@ async def take_quiz(quiz_id: int, user=Depends(get_current_user)):
 
     for q in questions.data:
         if q["question_type"] == "multiple_choice":
-            q["options"] = supabase.table("options") \
-                .select("id, option_text") \
+            # Get all options including is_correct for debugging
+            options = supabase.table("options") \
+                .select("id, option_text, is_correct") \
                 .eq("question_id", q["id"]) \
-                .execute().data
+                .execute()
+            
+            logger.info(f"Options for question {q['id']}: {options.data}")
+            
+            # Only send id and option_text to student (hide is_correct)
+            q["options"] = [
+                {"id": opt["id"], "option_text": opt["option_text"]}
+                for opt in options.data
+            ]
         else:
             q["options"] = []
 
@@ -559,33 +570,56 @@ async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
             .eq("quiz_id", quiz_id) \
             .execute()
         
+        if not questions.data:
+            raise HTTPException(status_code=404, detail="No questions found for this quiz")
+        
         graded_count = 0
         
         for q in questions.data:
             if q["question_type"] == "multiple_choice":
-                # Get the correct option
+                # Get ALL options for this question to debug
+                all_options = supabase.table("options") \
+                    .select("id, option_text, is_correct") \
+                    .eq("question_id", q["id"]) \
+                    .execute()
+                
+                logger.info(f"All options for question {q['id']}: {all_options.data}")
+                
+                # Get the correct option(s) - there should be exactly one
                 correct = supabase.table("options") \
                     .select("id") \
                     .eq("question_id", q["id"]) \
                     .eq("is_correct", True) \
-                    .single() \
                     .execute()
                 
-                if correct.data:
+                logger.info(f"Correct option for question {q['id']}: {correct.data}")
+                
+                if correct.data and len(correct.data) > 0:
+                    correct_option_id = correct.data[0]["id"]
                     pts = float(q.get("points") or 5)
+                    
                     # Get all student responses for this question
                     responses = supabase.table("student_responses") \
                         .select("id, selected_option_id") \
                         .eq("question_id", q["id"]) \
                         .execute()
                     
+                    logger.info(f"Found {len(responses.data)} responses for question {q['id']}")
+                    
                     for r in responses.data:
-                        is_correct = r["selected_option_id"] == correct.data["id"]
+                        is_correct = r["selected_option_id"] == correct_option_id
+                        logger.info(f"Response {r['id']}: selected {r['selected_option_id']}, correct is {correct_option_id}, result: {is_correct}")
+                        
                         supabase.table("student_responses").update({
                             "points": pts if is_correct else 0,
                             "is_correct": is_correct
                         }).eq("id", r["id"]).execute()
                         graded_count += 1
+                else:
+                    logger.warning(f"No correct option found for question {q['id']}")
+            else:
+                # Text questions - mark as needing manual grading
+                logger.info(f"Question {q['id']} is text type, skipping auto-grade")
         
         # Mark quiz as auto-graded
         supabase.table("quizzes").update({"auto_graded": True}).eq("id", quiz_id).execute()
@@ -661,7 +695,7 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
         for r in sorted_responses:
             q_data = r.get("questions", {})
             
-            # FIX: Determine if the answer is correct based on points
+            # Determine if the answer is correct based on points
             is_correct = False
             if r.get("points") is not None:
                 # If points > 0, it's correct
@@ -676,7 +710,7 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
                 "feedback": r.get("feedback"),
                 "text_answer": r.get("text_answer"),
                 "selected_option_id": r.get("selected_option_id"),
-                "is_correct": is_correct,  # FIX: This now properly sets is_correct
+                "is_correct": is_correct,
             }
             
             # If multiple choice, get option text and correct answer
@@ -876,3 +910,43 @@ async def export_quiz_result(quiz_id: int, user=Depends(get_current_user)):
     except Exception as e:
         logger.error(f"Error generating quiz results: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== DEBUG ENDPOINT ====================
+@router.get("/{quiz_id}/debug-options")
+async def debug_options(quiz_id: int, user=Depends(get_current_user)):
+    """Debug endpoint to check if options are stored correctly"""
+    if user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Only teachers can debug")
+    
+    questions = supabase.table("questions") \
+        .select("id, question_text") \
+        .eq("quiz_id", quiz_id) \
+        .execute()
+    
+    result = []
+    for q in questions.data:
+        options = supabase.table("options") \
+            .select("id, option_text, is_correct") \
+            .eq("question_id", q["id"]) \
+            .execute()
+        
+        correct_count = sum(1 for opt in options.data if opt.get("is_correct", False))
+        
+        result.append({
+            "question_id": q["id"],
+            "question_text": q["question_text"],
+            "options": options.data,
+            "correct_count": correct_count,
+            "has_correct": correct_count > 0,
+            "has_multiple_correct": correct_count > 1
+        })
+    
+    return {
+        "quiz_id": quiz_id,
+        "questions": result,
+        "total_questions": len(result),
+        "issues": [
+            q for q in result if q["correct_count"] == 0 or q["correct_count"] > 1
+        ]
+    }
