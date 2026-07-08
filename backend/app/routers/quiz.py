@@ -505,18 +505,40 @@ async def submit_quiz(quiz_id: int, payload: SubmissionPayload, user=Depends(get
                 content={"detail": "You have already submitted this quiz"}
             )
 
+        # Store responses and auto-grade them immediately
         for ans in payload.answers:
+            # 1. Insert the response
             response = {
                 "question_id": ans.question_id,
                 "student_id": student_db_id,
                 "selected_option_id": ans.selected_option_id,
                 "text_answer": ans.text_answer,
             }
-            supabase.table("student_responses").insert(response).execute()
+            result = supabase.table("student_responses").insert(response).execute()
+            
+            if result.data and ans.selected_option_id is not None:
+                # 2. Auto-grade this specific answer immediately
+                response_id = result.data[0]["id"]
+                
+                # Find the correct option
+                correct = supabase.table("options") \
+                    .select("id") \
+                    .eq("question_id", ans.question_id) \
+                    .eq("is_correct", True) \
+                    .execute()
+                
+                if correct.data:
+                    is_correct = ans.selected_option_id == correct.data[0]["id"]
+                    # Update the response with grade
+                    supabase.table("student_responses").update({
+                        "points": 5 if is_correct else 0,
+                        "is_correct": is_correct,
+                        "feedback": "Correct!" if is_correct else "Incorrect"
+                    }).eq("id", response_id).execute()
 
-        logger.info(f"Quiz {quiz_id} submitted successfully by student {student_db_id}")
+        logger.info(f"Quiz {quiz_id} submitted and auto-graded successfully for student {student_db_id}")
         return JSONResponse(
-            content={"detail": "Answers submitted successfully"}
+            content={"detail": "Answers submitted and graded successfully"}
         )
     
     except Exception as e:
@@ -525,8 +547,6 @@ async def submit_quiz(quiz_id: int, payload: SubmissionPayload, user=Depends(get
             status_code=500,
             content={"detail": f"Internal server error: {str(e)}"}
         )
-
-
 @router.put("/{quiz_id}/publish")
 async def publish_quiz(quiz_id: int, user=Depends(get_current_user)):
     if user["role"] != "teacher":
