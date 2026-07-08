@@ -496,9 +496,23 @@ export default function TeacherDashboard() {
 
   const handleCreateQuiz = async (e) => {
     e.preventDefault();
+    
+    // Check if any multiple choice question has no correct answer selected
+    const hasNoCorrectAnswer = questions.some(q => {
+        if (q.type === 'multiple_choice') {
+            return !q.options.some(opt => opt.is_correct === true);
+        }
+        return false;
+    });
+    
+    if (hasNoCorrectAnswer) {
+        showMsg('Please select a correct answer for each multiple choice question.', 'error');
+        return;
+    }
+    
     if (!quizTitle || questions.length === 0) {
-      showMsg('Please enter a title and at least one question', 'error');
-      return;
+        showMsg('Please enter a title and at least one question', 'error');
+        return;
     }
 
     const payload = {
@@ -1848,9 +1862,18 @@ export default function TeacherDashboard() {
                             value={opt.text || ''}
                             onChange={(e) => updateOption(qIdx, oIdx, e.target.value)}
                             placeholder={`Option ${oIdx + 1}`}
-                            className="flex-1 px-3 py-2 rounded-xl border border-ink-200 dark:border-navy-600 focus:border-brass-500 focus:ring-4 focus:ring-brass-50 dark:focus:ring-brass-500/20 outline-none transition-colors bg-white dark:bg-navy-700 text-navy-800 dark:text-white placeholder-ink-300 dark:placeholder-ink-500" 
+                            className={`flex-1 px-3 py-2 rounded-xl border focus:ring-4 focus:ring-brass-50 dark:focus:ring-brass-500/20 outline-none transition-colors bg-white dark:bg-navy-700 text-navy-800 dark:text-white placeholder-ink-300 dark:placeholder-ink-500 ${
+                              opt.is_correct 
+                                ? 'border-forest-500 dark:border-forest-500 bg-forest-50 dark:bg-forest-700/20' 
+                                : 'border-ink-200 dark:border-navy-600'
+                            }`}
                             required 
                           />
+                          {opt.is_correct && (
+                            <span className="text-xs text-forest-600 dark:text-forest-500 font-semibold">
+                              ✓ Correct
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
