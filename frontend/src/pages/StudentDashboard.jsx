@@ -182,22 +182,30 @@ export default function StudentDashboard() {
   };
 
   const fetchMyQuizResult = async (quizId) => {
+    if (!quizId) {
+        console.error('Invalid quiz ID');
+        return;
+    }
+    
     try {
-      const res = await fetch(`${API_URL}quizzes/${quizId}/my-result`, {
-        headers: { Authorization: `Bearer ${user.access_token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setMyQuizResults(prev => ({ 
-          ...prev, 
-          [quizId]: { 
-            ...data, 
-            auto_graded: data.auto_graded || false,
-          } 
-        }));
-      }
+        const res = await fetch(`${API_URL}quizzes/${quizId}/my-result`, {
+            headers: { Authorization: `Bearer ${user.access_token}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            setMyQuizResults(prev => ({ 
+                ...prev, 
+                [quizId]: { 
+                    ...data, 
+                    auto_graded: data.auto_graded || false,
+                } 
+            }));
+        } else if (res.status === 500) {
+            console.error('Server error fetching quiz result');
+            // Don't show error to user, just log it
+        }
     } catch (err) {
-      console.error('Failed to fetch quiz result:', err);
+        console.error('Failed to fetch quiz result:', err);
     }
   };
 
@@ -351,6 +359,11 @@ export default function StudentDashboard() {
 
   // Download results as HTML with print option
   const downloadQuizResults = async (quizId) => {
+    if (!quizId) {
+        showMsg('Invalid quiz ID', 'error');
+        return;
+    }
+    
     setExportingResults(true);
     try {
       const response = await fetch(`${API_URL}quizzes/${quizId}/export-result`, {
@@ -394,6 +407,11 @@ export default function StudentDashboard() {
 
   // View results in new tab as HTML
   const viewQuizResults = async (quizId) => {
+    if (!quizId) {
+        showMsg('Invalid quiz ID', 'error');
+        return;
+    }
+    
     setExportingResults(true);
     try {
       const response = await fetch(`${API_URL}quizzes/${quizId}/export-result`, {
@@ -419,7 +437,7 @@ export default function StudentDashboard() {
         window.URL.revokeObjectURL(url);
       }, 1000);
       
-      showMsg('Results opened in new tab. Use "Print > Save as PDF" to download.', 'success');
+      showMsg('Results opened in new tab.', 'success');
     } catch (err) {
       console.error('View error:', err);
       showMsg('Failed to view results', 'error');

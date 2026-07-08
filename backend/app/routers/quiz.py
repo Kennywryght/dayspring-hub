@@ -578,7 +578,7 @@ async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
         
         for q in questions.data:
             if q["question_type"] == "multiple_choice":
-                # CRITICAL: Get the correct option ID
+                # CRITICAL: Get the correct option ID - handle multiple rows
                 correct_options = supabase.table("options") \
                     .select("id") \
                     .eq("question_id", q["id"]) \
@@ -588,6 +588,7 @@ async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
                 logger.info(f"Question {q['id']} - Correct options found: {correct_options.data}")
                 
                 if correct_options.data and len(correct_options.data) > 0:
+                    # Take the first correct option
                     correct_option_id = correct_options.data[0]["id"]
                     pts = float(q.get("points") or 5)
                     
@@ -621,6 +622,7 @@ async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ==================== FIXED MY-RESULT ====================
 @router.get("/{quiz_id}/my-result")
 async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
     """Student: Get my result for a specific quiz with correct answers"""
@@ -698,6 +700,7 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
             }
             
             if r.get("selected_option_id"):
+                # Get the selected option text
                 option = supabase.table("options") \
                     .select("option_text") \
                     .eq("id", r["selected_option_id"]) \
@@ -706,15 +709,17 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
                 if option.data:
                     answer_data["selected_option_text"] = option.data["option_text"]
                 
+                # FIXED: Get the correct answer - handle multiple rows
                 if q_data.get("question_type") == "multiple_choice":
-                    correct_opt = supabase.table("options") \
+                    correct_opts = supabase.table("options") \
                         .select("option_text") \
                         .eq("question_id", r["question_id"]) \
                         .eq("is_correct", True) \
-                        .single() \
                         .execute()
-                    if correct_opt.data:
-                        answer_data["correct_answer"] = correct_opt.data["option_text"]
+                    
+                    if correct_opts.data and len(correct_opts.data) > 0:
+                        # Take the first correct option
+                        answer_data["correct_answer"] = correct_opts.data[0]["option_text"]
             
             answers.append(answer_data)
             if r.get("points") is not None:

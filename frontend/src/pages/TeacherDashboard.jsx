@@ -394,39 +394,56 @@ export default function TeacherDashboard() {
 
   // Fetch quiz results
   const fetchQuizResults = async (quizId) => {
+    if (!quizId) {
+        showMsg('Invalid quiz ID', 'error');
+        return;
+    }
+    
     try {
-      const res = await fetch(`${API_URL}quizzes/${quizId}/results`, {
-        headers: { Authorization: `Bearer ${user.access_token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setQuizResults(data);
-        setResultsView('results');
-      } else {
-        showMsg('Failed to fetch results', 'error');
-      }
+        const res = await fetch(`${API_URL}quizzes/${quizId}/results`, {
+            headers: { Authorization: `Bearer ${user.access_token}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            setQuizResults({
+                ...data,
+                quiz_id: quizId  // Store the quiz ID
+            });
+            setResultsView('results');
+        } else {
+            showMsg('Failed to fetch results', 'error');
+        }
     } catch (_err) {
-      console.error('Failed to fetch quiz results:', _err);
-      showMsg('Failed to fetch results', 'error');
+        console.error('Failed to fetch quiz results:', _err);
+        showMsg('Failed to fetch results', 'error');
     }
   };
 
   // Auto-grade quiz
   const autoGradeQuiz = async (quizId) => {
+    if (!quizId) {
+        showMsg('Invalid quiz ID. Please select a quiz first.', 'error');
+        return;
+    }
+    
     try {
-      const r = await fetch(`${API_URL}quizzes/${quizId}/auto-grade`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${user.access_token}` }
-      });
-      if (r.ok) { 
-        showMsg('Quiz auto-graded!'); 
-        fetchQuizResults(quizId); 
-      } else { 
-        const e = await r.json().catch(() => ({})); 
-        showMsg(e.detail || 'Auto-grade failed', 'error'); 
-      }
+        const r = await fetch(`${API_URL}quizzes/${quizId}/auto-grade`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${user.access_token}` }
+        });
+        
+        if (r.ok) { 
+            showMsg('Quiz auto-graded successfully!'); 
+            // Refresh the results after auto-grading
+            if (selectedQuizForGrading) {
+                await fetchQuizResults(selectedQuizForGrading);
+            }
+        } else { 
+            const e = await r.json().catch(() => ({})); 
+            showMsg(e.detail || 'Auto-grade failed', 'error'); 
+        }
     } catch (_) { 
-      showMsg('Auto-grade failed', 'error'); 
+        showMsg('Auto-grade failed. Please try again.', 'error'); 
     }
   };
 
@@ -885,8 +902,7 @@ export default function TeacherDashboard() {
                   value={`${window.location.origin}/live/${liveClassRoom}`}
                   className="flex-1 px-4 py-2 rounded-xl border border-ink-200 dark:border-navy-600 bg-white dark:bg-navy-800 text-navy-800 dark:text-white text-sm"
                 />
-                <button
-                  onClick={() => {
+                <button                  onClick={() => {
                     navigator.clipboard.writeText(`${window.location.origin}/live/${liveClassRoom}`);
                     showMsg('Link copied to clipboard!');
                   }}
@@ -1072,7 +1088,14 @@ export default function TeacherDashboard() {
                 Total possible points: {quizResults.total_possible}
               </p>
               <button 
-                onClick={() => autoGradeQuiz(quizResults.quiz_id || selectedQuizForGrading)}
+                onClick={() => {
+                  const quizId = quizResults.quiz_id || selectedQuizForGrading;
+                  if (!quizId) {
+                    showMsg('Invalid quiz ID', 'error');
+                    return;
+                  }
+                  autoGradeQuiz(quizId);
+                }}
                 className="bg-forest-50 dark:bg-forest-700/20 text-forest-700 dark:text-forest-400 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-forest-100 transition flex items-center gap-1"
               >
                 <Zap className="w-4 h-4" strokeWidth={1.75} /> Auto-Grade All
