@@ -1,5 +1,6 @@
 # app/routers/live_class.py
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from app.database import supabase
 from app.utils.auth import get_current_user
 from datetime import datetime
@@ -10,14 +11,19 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/live-class", tags=["Live Class"])
 
+class StartLiveClassRequest(BaseModel):
+    class_id: str
+
 @router.post("/start")
 async def start_live_class(
-    class_id: str,
+    request: StartLiveClassRequest,
     current_user: dict = Depends(get_current_user)
 ):
     """Teacher starts a live class session"""
     if current_user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can start live classes")
+    
+    class_id = request.class_id
     
     # Check if there's already an active session for this class
     existing = supabase.table("live_class") \
@@ -110,14 +116,12 @@ async def get_my_active_sessions(
 ):
     """Get all active sessions for the current user"""
     if current_user["role"] == "teacher":
-        # Teachers see their own active sessions
         result = supabase.table("live_class") \
             .select("*, classes(name)") \
             .eq("teacher_id", current_user["user_id"]) \
             .eq("is_active", True) \
             .execute()
     else:
-        # Students see active sessions for their class
         class_id = current_user.get("class_id")
         if not class_id:
             return []

@@ -100,9 +100,20 @@ export default function TeacherDashboard() {
   const [quizTitle, setQuizTitle] = useState('');
   const [quizDesc, setQuizDesc] = useState('');
   const [quizTotalPoints, setQuizTotalPoints] = useState('');
-  const [quizTimeLimit, setQuizTimeLimit] = useState(0); // Add time limit state
+  const [quizTimeLimit, setQuizTimeLimit] = useState(0);
   const [questions, setQuestions] = useState([
-    { text: '', type: 'multiple_choice', options: ['', '', '', ''], correctIndex: 0, points: '' }
+    { 
+      text: '', 
+      type: 'multiple_choice', 
+      options: [
+        { text: '', is_correct: false },
+        { text: '', is_correct: false },
+        { text: '', is_correct: false },
+        { text: '', is_correct: false }
+      ], 
+      correctIndex: 0, 
+      points: '' 
+    }
   ]);
   const [quizzes, setQuizzes] = useState([]);
 
@@ -250,6 +261,7 @@ export default function TeacherDashboard() {
             showMsg(err.detail || 'Failed to start live class', 'error');
         }
     } catch (err) {
+        console.error('Start live class error:', err);
         showMsg('Failed to start live class', 'error');
     } finally {
         setLiveClassLoading(false);
@@ -421,7 +433,18 @@ export default function TeacherDashboard() {
   const addQuestion = () => {
     setQuestions([
       ...questions,
-      { text: '', type: 'multiple_choice', options: ['', '', '', ''], correctIndex: 0, points: '' }
+      { 
+        text: '', 
+        type: 'multiple_choice', 
+        options: [
+          { text: '', is_correct: false },
+          { text: '', is_correct: false },
+          { text: '', is_correct: false },
+          { text: '', is_correct: false }
+        ], 
+        correctIndex: 0, 
+        points: '' 
+      }
     ]);
   };
 
@@ -439,12 +462,17 @@ export default function TeacherDashboard() {
 
   const updateOption = (qIndex, oIndex, value) => {
     const newQ = [...questions];
-    newQ[qIndex].options[oIndex] = value;
+    newQ[qIndex].options[oIndex].text = value;
     setQuestions(newQ);
   };
 
   const setCorrectOption = (qIndex, oIndex) => {
     const newQ = [...questions];
+    // Mark all options as false first
+    newQ[qIndex].options = newQ[qIndex].options.map((opt, idx) => ({
+      ...opt,
+      is_correct: idx === oIndex
+    }));
     newQ[qIndex].correctIndex = oIndex;
     setQuestions(newQ);
   };
@@ -460,7 +488,7 @@ export default function TeacherDashboard() {
       title: quizTitle,
       description: quizDesc,
       class_id: selectedClassId,
-      time_limit: parseInt(quizTimeLimit) || 0, // Add time limit to payload
+      time_limit: parseInt(quizTimeLimit) || 0,
       total_points: quizTotalPoints || null,
       questions: questions.map((q, idx) => ({
         question_text: q.text,
@@ -469,9 +497,9 @@ export default function TeacherDashboard() {
         points: q.points || null,
         options:
           q.type === 'multiple_choice'
-            ? q.options.map((opt, oi) => ({
-                option_text: opt,
-                is_correct: oi === q.correctIndex,
+            ? q.options.map((opt) => ({
+                option_text: opt.text,
+                is_correct: opt.is_correct || false,
               }))
             : null,
       })),
@@ -492,9 +520,20 @@ export default function TeacherDashboard() {
         setQuizTitle('');
         setQuizDesc('');
         setQuizTotalPoints('');
-        setQuizTimeLimit(0); // Reset time limit
+        setQuizTimeLimit(0);
         setQuestions([
-          { text: '', type: 'multiple_choice', options: ['', '', '', ''], correctIndex: 0, points: '' }
+          { 
+            text: '', 
+            type: 'multiple_choice', 
+            options: [
+              { text: '', is_correct: false },
+              { text: '', is_correct: false },
+              { text: '', is_correct: false },
+              { text: '', is_correct: false }
+            ], 
+            correctIndex: 0, 
+            points: '' 
+          }
         ]);
         fetchQuizzes();
       } else {
@@ -769,23 +808,23 @@ export default function TeacherDashboard() {
           <button
             onClick={startLiveClass}
             disabled={liveClassLoading}
-            className={`px-4 py-2.5 rounded-xl flex items-center gap-2 transition-colors ${
+            className={`px-3 py-2 rounded-xl flex items-center gap-1.5 text-sm font-medium transition-colors ${
                 liveClassActive 
                     ? 'bg-oxbrick-600 hover:bg-oxbrick-700 text-white' 
                     : 'bg-forest-600 hover:bg-forest-700 text-white'
             }`}
           >
             {liveClassLoading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : liveClassActive ? (
                 <>
-                    <Video className="w-4 h-4" />
-                    Live Class Active
+                    <Video className="w-3.5 h-3.5" />
+                    Live
                 </>
             ) : (
                 <>
-                    <Video className="w-4 h-4" />
-                    Start Live Class
+                    <Video className="w-3.5 h-3.5" />
+                    Start Live
                 </>
             )}
           </button>
@@ -1774,14 +1813,21 @@ export default function TeacherDashboard() {
                       <p className="text-sm font-medium text-ink-600 dark:text-ink-300">Options (mark the correct one)</p>
                       {q.options.map((opt, oIdx) => (
                         <div key={oIdx} className="flex items-center gap-3">
-                          <input type="radio" name={`correct-${qIdx}`}
-                            checked={q.correctIndex === oIdx}
+                          <input 
+                            type="radio" 
+                            name={`correct-${qIdx}`}
+                            checked={opt.is_correct === true}
                             onChange={() => setCorrectOption(qIdx, oIdx)}
-                            className="w-4 h-4 text-brass-600 border-ink-300 focus:ring-brass-500" />
-                          <input type="text" value={opt}
+                            className="w-4 h-4 text-brass-600 border-ink-300 focus:ring-brass-500" 
+                          />
+                          <input 
+                            type="text" 
+                            value={opt.text || ''}
                             onChange={(e) => updateOption(qIdx, oIdx, e.target.value)}
                             placeholder={`Option ${oIdx + 1}`}
-                            className="flex-1 px-3 py-2 rounded-xl border border-ink-200 dark:border-navy-600 focus:border-brass-500 focus:ring-4 focus:ring-brass-50 dark:focus:ring-brass-500/20 outline-none transition-colors bg-white dark:bg-navy-700 text-navy-800 dark:text-white placeholder-ink-300 dark:placeholder-ink-500" required />
+                            className="flex-1 px-3 py-2 rounded-xl border border-ink-200 dark:border-navy-600 focus:border-brass-500 focus:ring-4 focus:ring-brass-50 dark:focus:ring-brass-500/20 outline-none transition-colors bg-white dark:bg-navy-700 text-navy-800 dark:text-white placeholder-ink-300 dark:placeholder-ink-500" 
+                            required 
+                          />
                         </div>
                       ))}
                     </div>
