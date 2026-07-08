@@ -6,6 +6,7 @@ import StudentDashboard from './pages/StudentDashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
 import ParentDashboard from './pages/ParentDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import LiveClass from './pages/LiveClass';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -72,6 +73,13 @@ function AppRoutes() {
       <Route path="/admin" element={
         <ProtectedRoute allowedRoles={['super_admin']}>
           <AdminDashboard />
+        </ProtectedRoute>
+      } />
+      
+      {/* Live Class Route - accessible to both students and teachers */}
+      <Route path="/live/:roomName" element={
+        <ProtectedRoute allowedRoles={['student', 'teacher']}>
+          <LiveClass />
         </ProtectedRoute>
       } />
       

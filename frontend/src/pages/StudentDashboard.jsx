@@ -23,6 +23,7 @@ import {
   Eye,
   Loader2,
   ArrowLeft,
+  Video,
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://dayspring-hub.onrender.com/api/v1/';
@@ -61,6 +62,16 @@ export default function StudentDashboard() {
   const [showCorrectAnswers, setShowCorrectAnswers] = useState(false);
   const [exportingResults, setExportingResults] = useState(false);
 
+  // Timer states
+  const [timeLimit, setTimeLimit] = useState(0);
+  const [timeRemaining, setTimeRemaining] = useState(0);
+  const [timerActive, setTimerActive] = useState(false);
+  const [quizEnded, setQuizEnded] = useState(false);
+
+  // Live Class states
+  const [activeLiveClass, setActiveLiveClass] = useState(null);
+  const [checkingLiveClass, setCheckingLiveClass] = useState(false);
+
   useEffect(() => {
     if (!user || user.role !== 'student') {
       navigate('/login');
@@ -68,6 +79,36 @@ export default function StudentDashboard() {
     }
     fetchData();
   }, [user]);
+
+  // Check for live class when user is loaded
+  useEffect(() => {
+    if (user && user.role === 'student' && user.class_id) {
+      checkForLiveClass();
+    }
+  }, [user]);
+
+  // Timer effect
+  useEffect(() => {
+    if (timerActive && timeRemaining > 0) {
+      const timer = setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            setTimerActive(false);
+            setQuizEnded(true);
+            // Auto-submit the quiz
+            if (activeQuiz) {
+              submitQuiz();
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      return () => clearInterval(timer);
+    }
+  }, [timerActive, timeRemaining]);
 
   const fetchData = async () => {
     const headers = { Authorization: `Bearer ${user.access_token}` };
@@ -115,6 +156,28 @@ export default function StudentDashboard() {
           fetchMyQuizResult(sub.quiz_id);
         }
       });
+    }
+  };
+
+  const checkForLiveClass = async () => {
+    if (!user?.class_id) return;
+    setCheckingLiveClass(true);
+    try {
+      const res = await fetch(`${API_URL}live-class/active/${user.class_id}`, {
+        headers: { Authorization: `Bearer ${user.access_token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.is_active) {
+          setActiveLiveClass(data);
+        } else {
+          setActiveLiveClass(null);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to check live class:', err);
+    } finally {
+      setCheckingLiveClass(false);
     }
   };
 
@@ -177,12 +240,21 @@ export default function StudentDashboard() {
           return;
         }
         
+        // Set the quiz data
         setActiveQuiz(quizData);
         setQuizQuestions(questionsData);
         setResponses({});
+        
+        // Set timer
+        const limit = quizData.time_limit || 0;
+        setTimeLimit(limit);
+        setTimeRemaining(limit * 60); // Convert to seconds
+        setTimerActive(limit > 0);
+        setQuizEnded(false);
+        
         setTab('quizzes');
         
-        showMsg(`Quiz "${quizData.title}" loaded! Answer all questions and submit.`, 'success');
+        showMsg(`Quiz "${quizData.title}" loaded! ${limit > 0 ? `You have ${limit} minutes.` : 'No time limit.'}`, 'success');
       } else {
         const errorData = await res.json().catch(() => ({}));
         console.error('Failed to load quiz:', errorData);
@@ -207,18 +279,26 @@ export default function StudentDashboard() {
   const submitQuiz = async () => {
     if (!activeQuiz) return;
     
-    const unansweredQuestions = quizQuestions.filter(q => {
-      const response = responses[q.id];
-      if (q.question_type === 'multiple_choice') {
-        return !response?.selected_option_id;
-      } else {
-        return !response?.text_answer || response.text_answer.trim() === '';
-      }
-    });
+    // If quiz has ended, just submit what you have
+    if (quizEnded) {
+      showMsg('Time is up! Submitting your answers...', 'warning');
+    } else {
+      // Check if all questions are answered (only if not ended)
+      const unansweredQuestions = quizQuestions.filter(q => {
+        const response = responses[q.id];
+        if (q.question_type === 'multiple_choice') {
+          return !response?.selected_option_id;
+        } else {
+          return !response?.text_answer || response.text_answer.trim() === '';
+        }
+      });
 
-    if (unansweredQuestions.length > 0) {
-      showMsg(`Please answer all questions before submitting. (${unansweredQuestions.length} unanswered)`, 'error');
-      return;
+      if (unansweredQuestions.length > 0 && !quizEnded) {
+        const confirmSubmit = window.confirm(
+          `You have ${unansweredQuestions.length} unanswered question(s). Continue submitting?`
+        );
+        if (!confirmSubmit) return;
+      }
     }
 
     setSubmittingQuiz(true);
@@ -244,6 +324,8 @@ export default function StudentDashboard() {
         setActiveQuiz(null);
         setQuizQuestions([]);
         setResponses({});
+        setTimerActive(false);
+        setQuizEnded(false);
         await fetchData();
       } else {
         const err = await res.json().catch(() => ({}));
@@ -261,11 +343,13 @@ export default function StudentDashboard() {
       setActiveQuiz(null);
       setQuizQuestions([]);
       setResponses({});
+      setTimerActive(false);
+      setQuizEnded(false);
       showMsg('Quiz cancelled', 'success');
     }
   };
 
-  // FIXED: Download results as HTML with print option
+  // Download results as HTML with print option
   const downloadQuizResults = async (quizId) => {
     setExportingResults(true);
     try {
@@ -308,7 +392,7 @@ export default function StudentDashboard() {
     }
   };
 
-  // FIXED: View results in new tab as HTML
+  // View results in new tab as HTML
   const viewQuizResults = async (quizId) => {
     setExportingResults(true);
     try {
@@ -444,10 +528,53 @@ export default function StudentDashboard() {
           </p>
         </div>
 
+        {/* Timer Display */}
+        {timeLimit > 0 && (
+          <div className={`mb-6 p-4 rounded-xl border-2 ${
+            timeRemaining < 60 ? 'border-oxbrick-500 bg-oxbrick-50 dark:bg-oxbrick-700/20' :
+            timeRemaining < 300 ? 'border-brass-500 bg-brass-50 dark:bg-brass-700/20' :
+            'border-forest-500 bg-forest-50 dark:bg-forest-700/20'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock3 className={`w-5 h-5 ${
+                  timeRemaining < 60 ? 'text-oxbrick-600 dark:text-oxbrick-500' :
+                  timeRemaining < 300 ? 'text-brass-600 dark:text-brass-400' :
+                  'text-forest-600 dark:text-forest-500'
+                }`} />
+                <span className="font-semibold">Time Remaining:</span>
+              </div>
+              <span className={`text-2xl font-display font-bold ${
+                timeRemaining < 60 ? 'text-oxbrick-600 dark:text-oxbrick-500' :
+                timeRemaining < 300 ? 'text-brass-600 dark:text-brass-400' :
+                'text-forest-600 dark:text-forest-500'
+              }`}>
+                {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
+              </span>
+            </div>
+            {timeRemaining < 60 && (
+              <p className="text-sm text-oxbrick-600 dark:text-oxbrick-500 mt-1 font-semibold">
+                ⚠️ Less than 1 minute remaining!
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Quiz Ended Banner */}
+        {quizEnded && (
+          <div className="bg-oxbrick-50 dark:bg-oxbrick-700/20 border-2 border-oxbrick-500 rounded-xl p-6 text-center mb-6">
+            <AlertCircle className="w-12 h-12 text-oxbrick-600 dark:text-oxbrick-500 mx-auto mb-3" />
+            <h3 className="text-xl font-semibold text-oxbrick-700 dark:text-oxbrick-300">Time's Up!</h3>
+            <p className="text-oxbrick-600 dark:text-oxbrick-400">Your quiz has been automatically submitted.</p>
+          </div>
+        )}
+
         {msg && (
           <div className={`px-4 py-3 rounded-xl mb-6 text-sm font-medium animate-fade-in-up flex items-center gap-2 ${
             msgType === 'error'
               ? 'bg-oxbrick-50 dark:bg-oxbrick-700/20 text-oxbrick-600 dark:text-oxbrick-500 border border-oxbrick-200 dark:border-oxbrick-700/40'
+              : msgType === 'warning'
+              ? 'bg-brass-50 dark:bg-brass-700/20 text-brass-600 dark:text-brass-400 border border-brass-200 dark:border-brass-700/40'
               : 'bg-forest-50 dark:bg-forest-700/20 text-forest-600 dark:text-forest-500 border border-forest-500/20'
           }`}>
             {msgType === 'error' ? <AlertCircle className="w-4 h-4" strokeWidth={1.75} /> : <CheckCircle2 className="w-4 h-4" strokeWidth={1.75} />}
@@ -486,6 +613,7 @@ export default function StudentDashboard() {
                         checked={responses[q.id]?.selected_option_id === opt.id}
                         onChange={() => handleAnswerChange(q.id, opt.id, 'option')}
                         className="w-4 h-4 text-brass-600 border-ink-300 focus:ring-brass-500" 
+                        disabled={quizEnded}
                       />
                       <span className="text-navy-700 dark:text-ink-200">{opt.option_text}</span>
                     </label>
@@ -495,9 +623,10 @@ export default function StudentDashboard() {
                 <textarea 
                   value={responses[q.id]?.text_answer || ''}
                   onChange={(e) => handleAnswerChange(q.id, e.target.value, 'text')}
-                  placeholder="Type your answer here..."
+                  placeholder={quizEnded ? "Quiz ended - no more changes allowed" : "Type your answer here..."}
                   rows={4}
-                  className="w-full px-4 py-3 rounded-xl border border-ink-200 dark:border-navy-600 focus:border-brass-500 focus:ring-4 focus:ring-brass-50 dark:focus:ring-brass-500/20 outline-none transition-colors bg-white dark:bg-navy-700 text-navy-800 dark:text-white placeholder-ink-300 dark:placeholder-ink-500"
+                  disabled={quizEnded}
+                  className="w-full px-4 py-3 rounded-xl border border-ink-200 dark:border-navy-600 focus:border-brass-500 focus:ring-4 focus:ring-brass-50 dark:focus:ring-brass-500/20 outline-none transition-colors bg-white dark:bg-navy-700 text-navy-800 dark:text-white placeholder-ink-300 dark:placeholder-ink-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               )}
             </div>
@@ -506,15 +635,16 @@ export default function StudentDashboard() {
           <div className="flex flex-col sm:flex-row gap-4 pt-4">
             <button
               onClick={submitQuiz}
-              disabled={submittingQuiz}
+              disabled={submittingQuiz || quizEnded}
               className="flex-1 bg-brass-600 hover:bg-brass-700 text-white font-semibold px-8 py-4 rounded-2xl shadow-soft transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {submittingQuiz ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" strokeWidth={1.75} />}
-              {submittingQuiz ? 'Submitting...' : 'Submit Answers'}
+              {submittingQuiz ? 'Submitting...' : quizEnded ? 'Auto-Submitted' : 'Submit Answers'}
             </button>
             <button
               onClick={cancelQuiz}
-              className="flex-1 bg-ink-100 dark:bg-navy-700 hover:bg-ink-200 dark:hover:bg-navy-600 text-ink-700 dark:text-ink-300 font-semibold px-8 py-4 rounded-2xl transition-colors duration-150"
+              disabled={quizEnded}
+              className="flex-1 bg-ink-100 dark:bg-navy-700 hover:bg-ink-200 dark:hover:bg-navy-600 text-ink-700 dark:text-ink-300 font-semibold px-8 py-4 rounded-2xl transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
@@ -538,6 +668,8 @@ export default function StudentDashboard() {
         <div className={`px-4 py-3 rounded-xl mb-6 text-sm font-medium animate-fade-in-up flex items-center gap-2 ${
           msgType === 'error'
             ? 'bg-oxbrick-50 dark:bg-oxbrick-700/20 text-oxbrick-600 dark:text-oxbrick-500 border border-oxbrick-200 dark:border-oxbrick-700/40'
+            : msgType === 'warning'
+            ? 'bg-brass-50 dark:bg-brass-700/20 text-brass-600 dark:text-brass-400 border border-brass-200 dark:border-brass-700/40'
             : 'bg-forest-50 dark:bg-forest-700/20 text-forest-600 dark:text-forest-500 border border-forest-500/20'
         }`}>
           {msgType === 'error' ? <AlertCircle className="w-4 h-4" strokeWidth={1.75} /> : <CheckCircle2 className="w-4 h-4" strokeWidth={1.75} />}
@@ -684,6 +816,32 @@ export default function StudentDashboard() {
       {/* HOME TAB */}
       {tab === 'home' && (
         <div className="space-y-8 animate-fade-in-up">
+          {/* Live Class Banner */}
+          {activeLiveClass && (
+            <div className="bg-forest-50 dark:bg-forest-700/20 border-2 border-forest-500 rounded-2xl p-6 animate-fade-in-up">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 rounded-full bg-forest-500 animate-pulse" />
+                  <div>
+                    <h3 className="font-semibold text-navy-800 dark:text-ink-100">
+                      Live Class in Progress
+                    </h3>
+                    <p className="text-sm text-ink-500 dark:text-ink-300">
+                      Teacher: {activeLiveClass.teacher_name || 'Teacher'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => window.open(`https://meet.jit.si/${activeLiveClass.room_name}`, '_blank')}
+                  className="bg-forest-600 hover:bg-forest-700 text-white px-6 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-colors"
+                >
+                  <Video className="w-4 h-4" strokeWidth={1.75} />
+                  Join Live Class
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="bg-navy-700 rounded-2xl p-5 shadow-card text-white">
               <div className="flex items-center justify-between mb-3">
@@ -792,6 +950,11 @@ export default function StudentDashboard() {
                           : <ClipboardList className="w-5 h-5 text-ink-400 flex-shrink-0" strokeWidth={1.75} />}
                         <div>
                           <p className="font-medium text-navy-800 dark:text-ink-100">{quiz.title}</p>
+                          {quiz.time_limit > 0 && (
+                            <p className="text-xs text-ink-400 dark:text-ink-500 mt-0.5">
+                              ⏱ {quiz.time_limit} minutes
+                            </p>
+                          )}
                           {submitted && result && (
                             <p className="text-xs mt-1">
                               {result.graded_count > 0 ? (
@@ -1039,6 +1202,12 @@ export default function StudentDashboard() {
                   <div key={quiz.id} className="bg-white dark:bg-navy-800 rounded-2xl shadow-card border border-ink-200 dark:border-navy-600 p-6 hover:shadow-elevated transition-shadow duration-200">
                     <h3 className="font-semibold text-xl text-navy-800 dark:text-white mb-2">{quiz.title}</h3>
                     {quiz.description && <p className="text-sm text-ink-500 dark:text-ink-300 mb-4">{quiz.description}</p>}
+                    {quiz.time_limit > 0 && (
+                      <div className="flex items-center gap-2 text-sm text-ink-500 dark:text-ink-300 mb-4">
+                        <Clock3 className="w-4 h-4" strokeWidth={1.75} />
+                        <span>Time limit: {quiz.time_limit} minutes</span>
+                      </div>
+                    )}
                     {submitted ? (
                       <div>
                         <div className="flex items-center gap-2 text-forest-600 dark:text-forest-500 mb-3">

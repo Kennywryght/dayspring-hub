@@ -8,7 +8,7 @@ from app.routers import (
     auth_teacher, auth_student, auth_parent,
     materials, assignments, submissions,
     announcements, students_crud, parent,
-    admin, teacher, auth_admin, quiz
+    admin, teacher, auth_admin, quiz, live_class
 )
 from app.redis_config import RedisClient
 
@@ -72,7 +72,7 @@ routers = [
     auth_teacher, auth_student, auth_parent,
     materials, assignments, submissions,
     announcements, students_crud, parent,
-    admin, teacher, auth_admin, quiz
+    admin, teacher, auth_admin, quiz, live_class
 ]
 
 for r in routers:

@@ -28,6 +28,7 @@ class QuizCreate(BaseModel):
     title: str
     description: Optional[str] = None
     class_id: str
+    time_limit: int = 0  # Time limit in minutes (0 = no limit)
     questions: List[QuestionCreate]
 
 class QuizOut(BaseModel):
@@ -92,6 +93,7 @@ async def create_quiz(quiz_data: QuizCreate, user=Depends(get_current_user)):
         "class_id": quiz_data.class_id,
         "title": quiz_data.title,
         "description": quiz_data.description,
+        "time_limit": quiz_data.time_limit,  # Add time_limit field
         "is_published": False,
         "auto_graded": False,
         "created_at": datetime.utcnow().isoformat(),
@@ -112,17 +114,24 @@ async def create_quiz(quiz_data: QuizCreate, user=Depends(get_current_user)):
         question_id = res_q.data[0]["id"]
 
         if q.question_type == "multiple_choice" and q.options:
-            options_insert = [
-                {
+            # CRITICAL FIX: Ensure is_correct is being saved
+            options_insert = []
+            for opt in q.options:
+                options_insert.append({
                     "question_id": question_id,
                     "option_text": opt.option_text,
-                    "is_correct": opt.is_correct,
-                }
-                for opt in q.options
-            ]
-            logger.info(f"Creating options for question {question_id}: {options_insert}")
+                    "is_correct": opt.is_correct,  # This MUST be True for the correct answer
+                })
+            
+            # Log what we're saving for debugging
+            logger.info(f"Saving options for question {question_id}: {options_insert}")
+            
             result = supabase.table("options").insert(options_insert).execute()
-            logger.info(f"Options created: {result.data}")
+            logger.info(f"Options saved: {result.data}")
+            
+            # Verify the correct answer was saved
+            verify = supabase.table("options").select("id, option_text, is_correct").eq("question_id", question_id).execute()
+            logger.info(f"Verified options: {verify.data}")
 
     return {
         "id": quiz_id,
@@ -155,7 +164,7 @@ async def available_quizzes(user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="No class assigned to this student")
 
     quizzes = supabase.table("quizzes") \
-        .select("id, title, description, created_at") \
+        .select("id, title, description, created_at, time_limit") \
         .eq("class_id", class_id) \
         .eq("is_published", True) \
         .execute()
@@ -466,6 +475,7 @@ async def take_quiz(quiz_id: int, user=Depends(get_current_user)):
             "id": quiz_id,
             "title": quiz.data["title"],
             "description": quiz.data.get("description"),
+            "time_limit": quiz.data.get("time_limit", 0),  # Add time_limit to response
         },
         "questions": questions.data,
     }
@@ -577,25 +587,17 @@ async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
         
         for q in questions.data:
             if q["question_type"] == "multiple_choice":
-                # Get ALL options for this question to debug
-                all_options = supabase.table("options") \
-                    .select("id, option_text, is_correct") \
-                    .eq("question_id", q["id"]) \
-                    .execute()
-                
-                logger.info(f"All options for question {q['id']}: {all_options.data}")
-                
-                # Get the correct option(s) - there should be exactly one
-                correct = supabase.table("options") \
+                # CRITICAL FIX: Get the correct option ID
+                correct_options = supabase.table("options") \
                     .select("id") \
                     .eq("question_id", q["id"]) \
                     .eq("is_correct", True) \
                     .execute()
                 
-                logger.info(f"Correct option for question {q['id']}: {correct.data}")
+                logger.info(f"Question {q['id']} - Correct options found: {correct_options.data}")
                 
-                if correct.data and len(correct.data) > 0:
-                    correct_option_id = correct.data[0]["id"]
+                if correct_options.data and len(correct_options.data) > 0:
+                    correct_option_id = correct_options.data[0]["id"]
                     pts = float(q.get("points") or 5)
                     
                     # Get all student responses for this question
@@ -608,7 +610,7 @@ async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
                     
                     for r in responses.data:
                         is_correct = r["selected_option_id"] == correct_option_id
-                        logger.info(f"Response {r['id']}: selected {r['selected_option_id']}, correct is {correct_option_id}, result: {is_correct}")
+                        logger.info(f"Response {r['id']}: selected={r['selected_option_id']}, correct={correct_option_id}, result={is_correct}")
                         
                         supabase.table("student_responses").update({
                             "points": pts if is_correct else 0,

@@ -27,6 +27,7 @@ import {
   Target,
   Award,
   Loader2,
+  Video,
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://dayspring-hub.onrender.com/api/v1/';
@@ -89,10 +90,17 @@ export default function TeacherDashboard() {
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentPass, setNewStudentPass] = useState('');
 
+  // Live Class state
+  const [liveClassActive, setLiveClassActive] = useState(false);
+  const [liveClassRoom, setLiveClassRoom] = useState('');
+  const [liveClassLoading, setLiveClassLoading] = useState(false);
+  const [showLiveClassModal, setShowLiveClassModal] = useState(false);
+
   // Quiz feature state
   const [quizTitle, setQuizTitle] = useState('');
   const [quizDesc, setQuizDesc] = useState('');
   const [quizTotalPoints, setQuizTotalPoints] = useState('');
+  const [quizTimeLimit, setQuizTimeLimit] = useState(0); // Add time limit state
   const [questions, setQuestions] = useState([
     { text: '', type: 'multiple_choice', options: ['', '', '', ''], correctIndex: 0, points: '' }
   ]);
@@ -212,6 +220,66 @@ export default function TeacherDashboard() {
          }
          setAssignmentStats(stats);
       };
+
+  // Live Class functions
+  const startLiveClass = async () => {
+    if (!selectedClassId) {
+        showMsg('Please select a class first', 'error');
+        return;
+    }
+    
+    setLiveClassLoading(true);
+    try {
+        const res = await fetch(`${API_URL}live-class/start`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${user.access_token}`
+            },
+            body: JSON.stringify({ class_id: selectedClassId })
+        });
+        
+        if (res.ok) {
+            const data = await res.json();
+            setLiveClassRoom(data.room_name);
+            setLiveClassActive(true);
+            setShowLiveClassModal(true);
+            showMsg('Live class started successfully!');
+        } else {
+            const err = await res.json().catch(() => ({}));
+            showMsg(err.detail || 'Failed to start live class', 'error');
+        }
+    } catch (err) {
+        showMsg('Failed to start live class', 'error');
+    } finally {
+        setLiveClassLoading(false);
+    }
+  };
+
+  const endLiveClass = async () => {
+    if (!confirm('Are you sure you want to end the live class?')) return;
+    
+    try {
+        const res = await fetch(`${API_URL}live-class/end/${selectedClassId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${user.access_token}`
+            }
+        });
+        
+        if (res.ok) {
+            setLiveClassActive(false);
+            setLiveClassRoom('');
+            setShowLiveClassModal(false);
+            showMsg('Live class ended successfully');
+        } else {
+            showMsg('Failed to end live class', 'error');
+        }
+    } catch (err) {
+        showMsg('Failed to end live class', 'error');
+    }
+  };
 
   // Quiz API functions
   const fetchQuizzes = async () => {
@@ -392,6 +460,7 @@ export default function TeacherDashboard() {
       title: quizTitle,
       description: quizDesc,
       class_id: selectedClassId,
+      time_limit: parseInt(quizTimeLimit) || 0, // Add time limit to payload
       total_points: quizTotalPoints || null,
       questions: questions.map((q, idx) => ({
         question_text: q.text,
@@ -423,6 +492,7 @@ export default function TeacherDashboard() {
         setQuizTitle('');
         setQuizDesc('');
         setQuizTotalPoints('');
+        setQuizTimeLimit(0); // Reset time limit
         setQuestions([
           { text: '', type: 'multiple_choice', options: ['', '', '', ''], correctIndex: 0, points: '' }
         ]);
@@ -695,7 +765,30 @@ export default function TeacherDashboard() {
           </h1>
           <p className="text-ink-500 dark:text-ink-300 mt-2 text-lg">Manage materials, assignments, and students for your class.</p>
         </div>
-        <div className="w-full sm:w-auto">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <button
+            onClick={startLiveClass}
+            disabled={liveClassLoading}
+            className={`px-4 py-2.5 rounded-xl flex items-center gap-2 transition-colors ${
+                liveClassActive 
+                    ? 'bg-oxbrick-600 hover:bg-oxbrick-700 text-white' 
+                    : 'bg-forest-600 hover:bg-forest-700 text-white'
+            }`}
+          >
+            {liveClassLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+            ) : liveClassActive ? (
+                <>
+                    <Video className="w-4 h-4" />
+                    Live Class Active
+                </>
+            ) : (
+                <>
+                    <Video className="w-4 h-4" />
+                    Start Live Class
+                </>
+            )}
+          </button>
           <select
             value={selectedClassId}
             onChange={(e) => setSelectedClassId(e.target.value)}
@@ -716,6 +809,85 @@ export default function TeacherDashboard() {
         }`}>
           {msgType === 'error' ? <AlertCircle className="w-4 h-4" strokeWidth={1.75} /> : <CheckCircle2 className="w-4 h-4" strokeWidth={1.75} />}
           {msg}
+        </div>
+      )}
+
+      {/* Live Class Modal */}
+      {showLiveClassModal && (
+        <div className="fixed inset-0 bg-navy-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-navy-800 rounded-3xl shadow-elevated max-w-2xl w-full p-6 md:p-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-display font-semibold text-navy-800 dark:text-white flex items-center gap-2">
+                <Video className="w-6 h-6 text-brass-500" strokeWidth={1.75} />
+                Live Class Session
+              </h2>
+              <button 
+                onClick={endLiveClass}
+                className="text-oxbrick-600 dark:text-oxbrick-500 hover:text-oxbrick-700 dark:hover:text-oxbrick-400 transition-colors"
+              >
+                <X className="w-5 h-5" strokeWidth={1.75} />
+              </button>
+            </div>
+
+            <div className="bg-forest-50 dark:bg-forest-700/20 border border-forest-200 dark:border-forest-700/40 rounded-xl p-4 mb-6">
+              <div className="flex items-center gap-2 text-forest-700 dark:text-forest-400">
+                <div className="w-3 h-3 rounded-full bg-forest-500 animate-pulse" />
+                <span className="font-semibold">Live</span>
+                <span className="text-sm ml-2">Students can join now</span>
+              </div>
+            </div>
+
+            <div className="bg-ink-50 dark:bg-navy-700 rounded-xl p-4 mb-6">
+              <p className="text-sm text-ink-500 dark:text-ink-300 mb-2">Room Link:</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${window.location.origin}/live/${liveClassRoom}`}
+                  className="flex-1 px-4 py-2 rounded-xl border border-ink-200 dark:border-navy-600 bg-white dark:bg-navy-800 text-navy-800 dark:text-white text-sm"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/live/${liveClassRoom}`);
+                    showMsg('Link copied to clipboard!');
+                  }}
+                  className="bg-brass-600 hover:bg-brass-700 text-white px-4 py-2 rounded-xl text-sm transition-colors"
+                >
+                  Copy
+                </button>
+              </div>
+              <p className="text-xs text-ink-400 dark:text-ink-500 mt-2">
+                Share this link with your students to join the live class
+              </p>
+            </div>
+
+            {/* Jitsi Meet Iframe */}
+            <div className="rounded-xl overflow-hidden border border-ink-200 dark:border-navy-600 h-[400px] bg-navy-800">
+              <iframe
+                src={`https://meet.jit.si/${liveClassRoom}`}
+                allow="camera; microphone; fullscreen; display-capture"
+                className="w-full h-full"
+                title="Live Class"
+              />
+            </div>
+
+            <div className="flex justify-between mt-4">
+              <button
+                onClick={() => {
+                  window.open(`https://meet.jit.si/${liveClassRoom}`, '_blank');
+                }}
+                className="bg-navy-50 dark:bg-navy-700 text-navy-700 dark:text-ink-200 px-4 py-2 rounded-xl text-sm hover:bg-navy-100 dark:hover:bg-navy-600 transition-colors"
+              >
+                Open in New Tab
+              </button>
+              <button
+                onClick={endLiveClass}
+                className="bg-oxbrick-600 hover:bg-oxbrick-700 text-white px-6 py-2 rounded-xl font-semibold transition-colors"
+              >
+                End Session
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1033,6 +1205,7 @@ export default function TeacherDashboard() {
                         <p className="font-medium text-navy-800 dark:text-ink-100">{quiz.title}</p>
                         <p className="text-xs text-ink-500 dark:text-ink-300">
                           {quiz.is_published ? 'Published' : 'Draft'}
+                          {quiz.time_limit > 0 && ` · ${quiz.time_limit} min`}
                         </p>
                       </div>
                     </div>
@@ -1538,11 +1711,27 @@ export default function TeacherDashboard() {
                     onChange={(e) => setQuizDesc(e.target.value)}
                     className={inputPlain} />
                 </div>
-                <div className="sm:col-span-2">
+                <div>
                   <label className="block text-sm font-medium text-ink-600 dark:text-ink-300 mb-2">Total Points</label>
                   <input type="number" placeholder="e.g. 100" value={quizTotalPoints}
                     onChange={(e) => setQuizTotalPoints(e.target.value)}
                     className={inputPlain} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-ink-600 dark:text-ink-300 mb-2">
+                    Time Limit (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={quizTimeLimit}
+                    onChange={(e) => setQuizTimeLimit(e.target.value)}
+                    className={inputPlain}
+                    placeholder="0 = No time limit"
+                  />
+                  <p className="text-xs text-ink-400 dark:text-ink-500 mt-1">
+                    Set 0 for no time limit, or enter minutes (e.g., 30)
+                  </p>
                 </div>
               </div>
 
@@ -1636,6 +1825,11 @@ export default function TeacherDashboard() {
                           <span className="text-forest-600 dark:text-forest-500 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" strokeWidth={1.75} /> Published</span>
                         ) : (
                           <span className="text-brass-600 dark:text-brass-400 flex items-center gap-1"><Clock3 className="w-3.5 h-3.5" strokeWidth={1.75} /> Draft</span>
+                        )}
+                        {quiz.time_limit > 0 && (
+                          <span className="ml-2 text-ink-400 dark:text-ink-400 flex items-center gap-1">
+                            <Clock3 className="w-3.5 h-3.5" strokeWidth={1.75} /> {quiz.time_limit} min
+                          </span>
                         )}
                       </p>
                     </div>
