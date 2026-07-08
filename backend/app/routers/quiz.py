@@ -28,7 +28,7 @@ class QuizCreate(BaseModel):
     title: str
     description: Optional[str] = None
     class_id: str
-    time_limit: int = 0  # Time limit in minutes (0 = no limit)
+    time_limit: int = 0
     questions: List[QuestionCreate]
 
 class QuizOut(BaseModel):
@@ -93,7 +93,7 @@ async def create_quiz(quiz_data: QuizCreate, user=Depends(get_current_user)):
         "class_id": quiz_data.class_id,
         "title": quiz_data.title,
         "description": quiz_data.description,
-        "time_limit": quiz_data.time_limit,  # Add time_limit field
+        "time_limit": quiz_data.time_limit,
         "is_published": False,
         "auto_graded": False,
         "created_at": datetime.utcnow().isoformat(),
@@ -108,24 +108,21 @@ async def create_quiz(quiz_data: QuizCreate, user=Depends(get_current_user)):
             "question_text": q.question_text,
             "question_type": q.question_type,
             "order": q.order,
-            "points": 5,  # Default points per question
+            "points": 5,
         }
         res_q = supabase.table("questions").insert(question_insert).execute()
         question_id = res_q.data[0]["id"]
 
         if q.question_type == "multiple_choice" and q.options:
-            # CRITICAL FIX: Ensure is_correct is being saved
             options_insert = []
             for opt in q.options:
                 options_insert.append({
                     "question_id": question_id,
                     "option_text": opt.option_text,
-                    "is_correct": opt.is_correct,  # This MUST be True for the correct answer
+                    "is_correct": opt.is_correct,
                 })
             
-            # Log what we're saving for debugging
             logger.info(f"Saving options for question {question_id}: {options_insert}")
-            
             result = supabase.table("options").insert(options_insert).execute()
             logger.info(f"Options saved: {result.data}")
             
@@ -212,11 +209,9 @@ async def get_submission_answers(submission_id: str, user=Depends(get_current_us
             .eq("student_id", submission_id) \
             .execute()
         
-        # For each response with a selected_option_id, fetch the option text and number
         for r in responses.data:
             if r.get("selected_option_id") and r.get("questions"):
                 question_id = r["questions"]["id"]
-                # Get all options for this question to find the position
                 options = supabase.table("options") \
                     .select("id, option_text") \
                     .eq("question_id", question_id) \
@@ -224,10 +219,9 @@ async def get_submission_answers(submission_id: str, user=Depends(get_current_us
                     .execute()
                 
                 if options.data:
-                    # Find which position the selected option is in
                     for idx, opt in enumerate(options.data):
                         if opt["id"] == r["selected_option_id"]:
-                            r["selected_option_number"] = idx + 1  # 1-based numbering
+                            r["selected_option_number"] = idx + 1
                             r["selected_option_text"] = opt["option_text"]
                             break
         
@@ -242,7 +236,7 @@ async def get_submission_answers(submission_id: str, user=Depends(get_current_us
 
 @router.put("/submissions/{submission_id}/grade")
 async def grade_submission(submission_id: str, payload: GradePayload, user=Depends(get_current_user)):
-    """Teacher: Grade a student's quiz answers (also works for re-grading)"""
+    """Teacher: Grade a student's quiz answers"""
     if user["role"] != "teacher":
         raise HTTPException(status_code=403, detail="Only teachers can grade submissions")
     
@@ -252,7 +246,6 @@ async def grade_submission(submission_id: str, payload: GradePayload, user=Depen
             
             if grade.points is not None:
                 update_data["points"] = float(grade.points)
-                # If points are assigned, set is_correct based on points > 0
                 if float(grade.points) > 0:
                     update_data["is_correct"] = True
                 else:
@@ -454,13 +447,10 @@ async def take_quiz(quiz_id: int, user=Depends(get_current_user)):
 
     for q in questions.data:
         if q["question_type"] == "multiple_choice":
-            # Get all options including is_correct for debugging
             options = supabase.table("options") \
                 .select("id, option_text, is_correct") \
                 .eq("question_id", q["id"]) \
                 .execute()
-            
-            logger.info(f"Options for question {q['id']}: {options.data}")
             
             # Only send id and option_text to student (hide is_correct)
             q["options"] = [
@@ -475,7 +465,7 @@ async def take_quiz(quiz_id: int, user=Depends(get_current_user)):
             "id": quiz_id,
             "title": quiz.data["title"],
             "description": quiz.data.get("description"),
-            "time_limit": quiz.data.get("time_limit", 0),  # Add time_limit to response
+            "time_limit": quiz.data.get("time_limit", 0),
         },
         "questions": questions.data,
     }
@@ -568,6 +558,7 @@ async def delete_quiz(quiz_id: int, user=Depends(get_current_user)):
     return {"detail": "Quiz deleted successfully"}
 
 
+# ==================== FIXED AUTO-GRADE ====================
 @router.post("/{quiz_id}/auto-grade")
 async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
     if user["role"] != "teacher":
@@ -581,13 +572,13 @@ async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
             .execute()
         
         if not questions.data:
-            raise HTTPException(status_code=404, detail="No questions found for this quiz")
+            raise HTTPException(status_code=404, detail="No questions found")
         
         graded_count = 0
         
         for q in questions.data:
             if q["question_type"] == "multiple_choice":
-                # CRITICAL FIX: Get the correct option ID
+                # CRITICAL: Get the correct option ID
                 correct_options = supabase.table("options") \
                     .select("id") \
                     .eq("question_id", q["id"]) \
@@ -600,13 +591,11 @@ async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
                     correct_option_id = correct_options.data[0]["id"]
                     pts = float(q.get("points") or 5)
                     
-                    # Get all student responses for this question
+                    # Get all student responses
                     responses = supabase.table("student_responses") \
                         .select("id, selected_option_id") \
                         .eq("question_id", q["id"]) \
                         .execute()
-                    
-                    logger.info(f"Found {len(responses.data)} responses for question {q['id']}")
                     
                     for r in responses.data:
                         is_correct = r["selected_option_id"] == correct_option_id
@@ -619,11 +608,10 @@ async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
                         graded_count += 1
                 else:
                     logger.warning(f"No correct option found for question {q['id']}")
-            else:
-                # Text questions - mark as needing manual grading
-                logger.info(f"Question {q['id']} is text type, skipping auto-grade")
+                    # Log all options for debugging
+                    all_opts = supabase.table("options").select("id, option_text, is_correct").eq("question_id", q["id"]).execute()
+                    logger.warning(f"All options for question {q['id']}: {all_opts.data}")
         
-        # Mark quiz as auto-graded
         supabase.table("quizzes").update({"auto_graded": True}).eq("id", quiz_id).execute()
         
         return {"message": f"Quiz auto-graded successfully. {graded_count} responses graded."}
@@ -643,7 +631,6 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
         student_db_id = await get_student_db_id(user)
         logger.info(f"Fetching result for student {student_db_id}, quiz {quiz_id}")
         
-        # Get quiz info
         quiz = supabase.table("quizzes") \
             .select("id, title, auto_graded") \
             .eq("id", quiz_id) \
@@ -653,7 +640,6 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
         if not quiz.data:
             raise HTTPException(status_code=404, detail="Quiz not found")
         
-        # Get questions for this quiz
         questions = supabase.table("questions") \
             .select("id, question_text, question_type, points, order") \
             .eq("quiz_id", quiz_id) \
@@ -661,9 +647,8 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
             .execute()
         
         total_questions = len(questions.data)
-        total_possible = total_questions * 5  # Each question worth 5 points
+        total_possible = total_questions * 5
         
-        # Get student responses
         responses = supabase.table("student_responses") \
             .select("*, questions!inner(quiz_id, question_text, question_type, order, points)") \
             .eq("student_id", student_db_id) \
@@ -684,7 +669,6 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
                 "answers": [],
             }
         
-        # Sort responses by question order manually
         sorted_responses = sorted(
             responses.data, 
             key=lambda r: r.get("questions", {}).get("order", 0)
@@ -697,10 +681,8 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
         for r in sorted_responses:
             q_data = r.get("questions", {})
             
-            # Determine if the answer is correct based on points
             is_correct = False
             if r.get("points") is not None:
-                # If points > 0, it's correct
                 if float(r.get("points", 0)) > 0:
                     is_correct = True
             
@@ -715,7 +697,6 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
                 "is_correct": is_correct,
             }
             
-            # If multiple choice, get option text and correct answer
             if r.get("selected_option_id"):
                 option = supabase.table("options") \
                     .select("option_text") \
@@ -725,7 +706,6 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
                 if option.data:
                     answer_data["selected_option_text"] = option.data["option_text"]
                 
-                # Get correct answer for this question
                 if q_data.get("question_type") == "multiple_choice":
                     correct_opt = supabase.table("options") \
                         .select("option_text") \
@@ -762,27 +742,23 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
 
 @router.get("/{quiz_id}/export-result")
 async def export_quiz_result(quiz_id: int, user=Depends(get_current_user)):
-    """Export student's quiz result as HTML report that can be printed/saved as PDF"""
+    """Export student's quiz result as HTML report"""
     if user["role"] != "student":
         raise HTTPException(status_code=403, detail="Only students can export results")
     
     try:
-        # Get the result using the existing function
         result = await get_my_quiz_result(quiz_id, user)
         
         if not result.get("submitted"):
             raise HTTPException(status_code=400, detail="You haven't submitted this quiz yet")
         
-        # Calculate percentage
         total_possible = result.get("total_possible", 1)
         percentage = round((result.get("total_points", 0) / total_possible) * 100) if total_possible > 0 else 0
         
-        # Get student info
         student = supabase.table("students").select("display_name, student_number").eq("id", user["user_id"]).single().execute()
         student_name = student.data.get("display_name", "Student") if student.data else "Student"
         student_number = student.data.get("student_number", "N/A") if student.data else "N/A"
         
-        # Build HTML report
         html = f"""
         <!DOCTYPE html>
         <html>
@@ -842,7 +818,6 @@ async def export_quiz_result(quiz_id: int, user=Depends(get_current_user)):
         """
         
         for i, ans in enumerate(result.get("answers", [])):
-            # Determine status
             is_correct = ans.get("is_correct")
             
             if is_correct is True:
@@ -861,7 +836,6 @@ async def export_quiz_result(quiz_id: int, user=Depends(get_current_user)):
             points_display = ans.get('points') if ans.get('points') is not None else 'N/A'
             points_class = "points-correct" if is_correct is True else "points-incorrect" if is_correct is False else ""
             
-            # Get answer text
             answer_text = ans.get('selected_option_text') or ans.get('text_answer') or 'No answer provided'
             
             html += f"""
@@ -898,7 +872,6 @@ async def export_quiz_result(quiz_id: int, user=Depends(get_current_user)):
         </html>
         """
         
-        # Return HTML response with proper headers
         return HTMLResponse(
             content=html,
             headers={
