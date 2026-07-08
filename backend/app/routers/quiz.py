@@ -558,7 +558,7 @@ async def delete_quiz(quiz_id: int, user=Depends(get_current_user)):
     return {"detail": "Quiz deleted successfully"}
 
 
-# ==================== FIXED AUTO-GRADE ====================
+# ==================== FIXED AUTO-GRADE - FORCES UPDATE ====================
 @router.post("/{quiz_id}/auto-grade")
 async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
     if user["role"] != "teacher":
@@ -575,24 +575,24 @@ async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
             raise HTTPException(status_code=404, detail="No questions found")
         
         graded_count = 0
+        results = []
         
         for q in questions.data:
             if q["question_type"] == "multiple_choice":
-                # CRITICAL: Get the correct option ID - handle multiple rows
+                # Get the correct option
                 correct_options = supabase.table("options") \
                     .select("id") \
                     .eq("question_id", q["id"]) \
                     .eq("is_correct", True) \
                     .execute()
                 
-                logger.info(f"Question {q['id']} - Correct options found: {correct_options.data}")
+                logger.info(f"Question {q['id']} - Correct options: {correct_options.data}")
                 
                 if correct_options.data and len(correct_options.data) > 0:
-                    # Take the first correct option
                     correct_option_id = correct_options.data[0]["id"]
                     pts = float(q.get("points") or 5)
                     
-                    # Get all student responses
+                    # Get all student responses for this question
                     responses = supabase.table("student_responses") \
                         .select("id, selected_option_id") \
                         .eq("question_id", q["id"]) \
@@ -600,22 +600,40 @@ async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
                     
                     for r in responses.data:
                         is_correct = r["selected_option_id"] == correct_option_id
+                        
                         logger.info(f"Response {r['id']}: selected={r['selected_option_id']}, correct={correct_option_id}, result={is_correct}")
                         
-                        supabase.table("student_responses").update({
+                        # FORCE UPDATE - explicitly set all fields
+                        update_result = supabase.table("student_responses").update({
                             "points": pts if is_correct else 0,
-                            "is_correct": is_correct
+                            "is_correct": is_correct,
+                            "feedback": "Auto-graded" if is_correct else "Incorrect"
                         }).eq("id", r["id"]).execute()
-                        graded_count += 1
+                        
+                        if update_result.data:
+                            graded_count += 1
+                            results.append({
+                                "response_id": r["id"],
+                                "is_correct": is_correct,
+                                "points": pts if is_correct else 0
+                            })
+                            
+                            # Verify the update worked
+                            verify = supabase.table("student_responses") \
+                                .select("id, points, is_correct") \
+                                .eq("id", r["id"]) \
+                                .execute()
+                            logger.info(f"Verification after update: {verify.data}")
                 else:
                     logger.warning(f"No correct option found for question {q['id']}")
-                    # Log all options for debugging
-                    all_opts = supabase.table("options").select("id, option_text, is_correct").eq("question_id", q["id"]).execute()
-                    logger.warning(f"All options for question {q['id']}: {all_opts.data}")
         
+        # Mark quiz as auto-graded
         supabase.table("quizzes").update({"auto_graded": True}).eq("id", quiz_id).execute()
         
-        return {"message": f"Quiz auto-graded successfully. {graded_count} responses graded."}
+        return {
+            "message": f"Quiz auto-graded successfully. {graded_count} responses graded.",
+            "details": results
+        }
     
     except Exception as e:
         logger.error(f"Error in auto-grade: {e}")
@@ -659,6 +677,10 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
         
         logger.info(f"Found {len(responses.data)} responses for student {student_db_id}, quiz {quiz_id}")
         
+        # Log the raw response data for debugging
+        for r in responses.data:
+            logger.info(f"Raw response: id={r['id']}, is_correct={r.get('is_correct')}, points={r.get('points')}, selected={r.get('selected_option_id')}")
+        
         if not responses.data:
             return {
                 "quiz_title": quiz.data["title"],
@@ -683,14 +705,15 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
         for r in sorted_responses:
             q_data = r.get("questions", {})
             
-            # CRITICAL FIX: Use the stored is_correct flag from the database
-            # This is the actual value set by auto-grade or manual grading
+            # CRITICAL: Get the is_correct value directly from the database
             is_correct = r.get("is_correct", False)
             
-            # If is_correct is None or False, but points > 0, it's still correct
+            # If is_correct is None, check points
             if is_correct is False and r.get("points") is not None:
                 if float(r.get("points", 0)) > 0:
                     is_correct = True
+            
+            logger.info(f"Response {r['id']}: is_correct from DB = {is_correct}")
             
             answer_data = {
                 "question_id": r["question_id"],
@@ -700,7 +723,7 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
                 "feedback": r.get("feedback"),
                 "text_answer": r.get("text_answer"),
                 "selected_option_id": r.get("selected_option_id"),
-                "is_correct": is_correct,  # Use the stored value
+                "is_correct": is_correct if is_correct is not None else False,
             }
             
             if r.get("selected_option_id"):
@@ -740,7 +763,7 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
             "answers": answers,
         }
         
-        logger.info(f"Returning result: {result['total_points']}/{result['total_possible']}")
+        logger.info(f"Returning result: {result}")
         return result
     
     except Exception as e:
