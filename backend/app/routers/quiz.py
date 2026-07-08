@@ -622,7 +622,7 @@ async def auto_grade_quiz(quiz_id: int, user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ==================== FIXED MY-RESULT ====================
+# ==================== FIXED MY-RESULT - Uses is_correct flag directly ====================
 @router.get("/{quiz_id}/my-result")
 async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
     """Student: Get my result for a specific quiz with correct answers"""
@@ -683,8 +683,12 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
         for r in sorted_responses:
             q_data = r.get("questions", {})
             
-            is_correct = False
-            if r.get("points") is not None:
+            # CRITICAL FIX: Use the stored is_correct flag from the database
+            # This is the actual value set by auto-grade or manual grading
+            is_correct = r.get("is_correct", False)
+            
+            # If is_correct is None or False, but points > 0, it's still correct
+            if is_correct is False and r.get("points") is not None:
                 if float(r.get("points", 0)) > 0:
                     is_correct = True
             
@@ -696,7 +700,7 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
                 "feedback": r.get("feedback"),
                 "text_answer": r.get("text_answer"),
                 "selected_option_id": r.get("selected_option_id"),
-                "is_correct": is_correct,
+                "is_correct": is_correct,  # Use the stored value
             }
             
             if r.get("selected_option_id"):
@@ -709,7 +713,7 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
                 if option.data:
                     answer_data["selected_option_text"] = option.data["option_text"]
                 
-                # FIXED: Get the correct answer - handle multiple rows
+                # Get the correct answer for display
                 if q_data.get("question_type") == "multiple_choice":
                     correct_opts = supabase.table("options") \
                         .select("option_text") \
@@ -718,7 +722,6 @@ async def get_my_quiz_result(quiz_id: int, user=Depends(get_current_user)):
                         .execute()
                     
                     if correct_opts.data and len(correct_opts.data) > 0:
-                        # Take the first correct option
                         answer_data["correct_answer"] = correct_opts.data[0]["option_text"]
             
             answers.append(answer_data)
