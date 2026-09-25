@@ -373,55 +373,38 @@ export default function UnifiedLogin() {
   if (!role) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-parchment dark:bg-navy-900 p-4 sm:p-6">
-        <div className="w-full max-w-md">
-          {/* Header */}
-          <div className="text-center mb-8 sm:mb-10 animate-fade-in-up">
+        <div className="w-full max-w-lg">
+          <div className="text-center mb-10">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white dark:bg-navy-800 shadow-card border border-brass-500/30 mb-5">
               <img src="/logo.jpeg" alt="Dayspring Hub" className="w-11 h-11 rounded-xl object-cover" />
             </div>
-            <h1 className="text-3xl sm:text-4xl font-display font-semibold text-navy-800 dark:text-white">
+            <h1 className="text-3xl font-display font-semibold text-navy-800 dark:text-white">
               Dayspring <span className="text-brass-500">Hub</span>
             </h1>
             <div className="w-16 h-px bg-brass-500 mx-auto mt-3 mb-3" />
-            <p className="text-ink-500 dark:text-ink-300 text-sm sm:text-base">Select your role to continue</p>
+            <p className="text-ink-500 dark:text-ink-300 text-sm">Select your role to continue</p>
           </div>
 
-          {/* Role cards — compact width, taller height, modern */}
           <div className="space-y-3">
-            {Object.entries(roleConfig).map(([key, r], i) => (
+            {Object.entries(roleConfig).map(([key, r]) => (
               <button
                 key={key}
                 onClick={() => { playClick(); setRole(key); }}
-                style={{ animationDelay: `${i * 0.06}s` }}
-                className={`group relative w-full overflow-hidden flex items-center gap-4 px-4 py-5 sm:px-5 sm:py-6 bg-white dark:bg-navy-800 rounded-2xl border border-ink-200 dark:border-navy-600 ${r.cardHover} transition-all duration-200 hover:shadow-elevated hover:-translate-y-0.5 active:scale-[0.99] animate-fade-in-up`}
+                className={`w-full flex items-center gap-4 p-5 bg-white dark:bg-navy-800 rounded-2xl border border-ink-200 dark:border-navy-600 ${r.cardHover} transition-colors duration-150 group`}
               >
-                {/* Soft glow on hover */}
-                <div className={`pointer-events-none absolute -top-16 -right-16 w-40 h-40 rounded-full bg-gradient-to-br ${r.glow} opacity-0 group-hover:opacity-100 blur-2xl transition-opacity duration-300`} />
-
-                {/* Icon chip */}
-                <div className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br ${r.iconBg} text-white shadow-soft group-hover:scale-105 transition-transform duration-200`}>
-                  <r.Icon className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={1.75} />
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${r.iconSoft}`}>
+                  <r.Icon className="w-5 h-5" strokeWidth={1.75} />
                 </div>
-
-                {/* Text */}
-                <div className="relative text-left flex-1 min-w-0">
-                  <h3 className="font-semibold text-navy-800 dark:text-white text-[15px] sm:text-base leading-tight">
-                    {r.label}
-                  </h3>
-                  <p className="text-xs sm:text-[13px] text-ink-500 dark:text-ink-300 leading-snug mt-1 truncate">
-                    {r.desc}
-                  </p>
+                <div className="text-left flex-1">
+                  <h3 className="font-semibold text-navy-800 dark:text-white text-sm">{r.label}</h3>
+                  <p className="text-xs text-ink-500 dark:text-ink-300">{r.desc}</p>
                 </div>
-
-                {/* Arrow chip */}
-                <div className="relative flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center bg-ink-100 dark:bg-navy-700 text-ink-500 dark:text-ink-400 group-hover:bg-navy-700 group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-navy-800 transition-all duration-200">
-                  <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform duration-200" strokeWidth={2} />
-                </div>
+                <ChevronRight className="w-4 h-4 text-ink-300 dark:text-ink-500 group-hover:translate-x-0.5 transition-transform duration-150" strokeWidth={1.75} />
               </button>
             ))}
           </div>
 
-          <div className="text-center mt-7">
+          <div className="text-center mt-6">
             <button
               onClick={() => setShowForgotPassword(true)}
               className="text-sm text-brass-600 dark:text-brass-400 hover:underline font-medium transition-colors"
@@ -433,18 +416,12 @@ export default function UnifiedLogin() {
           <p className="text-center mt-8 text-sm">
             <button
               onClick={() => navigate('/')}
-              className="text-ink-400 dark:text-ink-500 hover:text-navy-700 dark:hover:text-white transition-colors inline-flex items-center gap-1.5"
+              className="text-ink-400 dark:text-ink-500 hover:text-navy-700 dark:hover:text-white transition-colors inline-flex items-center gap-1"
             >
               <ArrowLeft className="w-3.5 h-3.5" strokeWidth={1.75} /> Back to Home
             </button>
           </p>
         </div>
-
-        <style>{`
-          @keyframes fade-in-up { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
-          .animate-fade-in-up{animation:fade-in-up 0.5s ease-out both}
-          @media (prefers-reduced-motion: reduce){ .animate-fade-in-up{animation:none !important} }
-        `}</style>
       </div>
     );
   }
@@ -454,7 +431,7 @@ export default function UnifiedLogin() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-parchment dark:bg-navy-900 p-4 sm:p-6">
-      <div className="w-full max-w-5xl">
+      <div className="w-full max-w-2xl">
         <button
           onClick={() => { setRole(null); resetErrorState(); }}
           className="mb-6 text-sm text-ink-400 dark:text-ink-500 hover:text-navy-700 dark:hover:text-white transition-colors inline-flex items-center gap-1.5"
@@ -462,52 +439,27 @@ export default function UnifiedLogin() {
           <ArrowLeft className="w-3.5 h-3.5" strokeWidth={1.75} /> Choose different role
         </button>
 
-        <div className="bg-white dark:bg-navy-800 rounded-3xl border border-ink-200 dark:border-navy-700 shadow-elevated overflow-hidden grid lg:grid-cols-2 animate-fade-in-up">
-          {/* Left: brand panel */}
-          <div className="relative hidden lg:flex flex-col justify-between bg-navy-800 dark:bg-navy-950 p-10 overflow-hidden">
-            <div className={`absolute -top-20 -right-20 w-72 h-72 rounded-full bg-gradient-to-br ${current.glow} blur-3xl`} />
-            <div className={`absolute -bottom-24 -left-16 w-72 h-72 rounded-full bg-gradient-to-tr ${current.glow} blur-3xl`} />
+        <div className="bg-white dark:bg-navy-800 rounded-3xl border border-ink-200 dark:border-navy-700 shadow-elevated overflow-hidden animate-fade-in-up">
+          {/* Header */}
+          <div className="relative bg-navy-800 dark:bg-navy-950 px-7 py-8 sm:px-9 sm:py-9 text-center overflow-hidden">
+            <div className={`absolute -top-16 -right-16 w-56 h-56 rounded-full bg-gradient-to-br ${current.glow} blur-3xl`} />
+            <div className={`absolute -bottom-20 -left-16 w-56 h-56 rounded-full bg-gradient-to-tr ${current.glow} blur-3xl`} />
 
             <div className="relative">
-              <div className="flex items-center gap-2.5 mb-10">
-                <div className="w-10 h-10 rounded-xl overflow-hidden border border-brass-500/30">
-                  <img src="/logo.jpeg" alt="Dayspring Hub" className="w-full h-full object-cover" />
-                </div>
-                <span className="text-lg font-display font-semibold text-white">
-                  Dayspring<span className="text-brass-400"> Hub</span>
-                </span>
-              </div>
-
-              <div className={`inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-6 bg-gradient-to-br ${current.iconBg} text-white shadow-soft`}>
-                <current.Icon className="w-8 h-8" strokeWidth={1.75} />
-              </div>
-
-              <h2 className="text-3xl font-display font-semibold text-white leading-tight">
-                {current.title}
-              </h2>
-              <p className="text-ink-300 mt-3 text-sm leading-relaxed max-w-sm">
-                {current.desc}. Sign in to continue to your personalized dashboard.
-              </p>
-            </div>
-
-            <div className="relative flex items-center gap-3 text-xs text-ink-400">
-              <ShieldCheck className="w-4 h-4 text-brass-400" strokeWidth={1.75} />
-              Secure, encrypted sign-in
-            </div>
-          </div>
-
-          {/* Right: form */}
-          <div className="p-7 sm:p-10">
-            {/* Mobile-only header */}
-            <div className="lg:hidden text-center mb-7">
               <div className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4 bg-gradient-to-br ${current.iconBg} text-white shadow-soft`}>
                 <current.Icon className="w-7 h-7" strokeWidth={1.75} />
               </div>
-              <h2 className="text-xl sm:text-2xl font-display font-semibold text-navy-800 dark:text-white">
+              <h2 className="text-xl sm:text-2xl font-display font-semibold text-white">
                 {current.title}
               </h2>
+              <p className="text-ink-300 mt-2 text-sm max-w-sm mx-auto">
+                {current.desc}. Sign in to continue to your personalized dashboard.
+              </p>
             </div>
+          </div>
 
+          {/* Form */}
+          <div className="px-7 py-8 sm:px-9 sm:py-10">
             {error && (
               <div className="bg-oxbrick-50 dark:bg-oxbrick-700/20 border border-oxbrick-200 dark:border-oxbrick-700/40 text-oxbrick-600 dark:text-oxbrick-500 px-4 py-3 rounded-2xl text-sm mb-6 flex items-center gap-2 animate-fade-in-up">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
@@ -522,7 +474,7 @@ export default function UnifiedLogin() {
                 : role === 'parent' ? handleParentLogin
                 : handleAdminLogin
               }
-              className="space-y-4"
+              className="space-y-5"
             >
               {role === 'teacher' && (
                 <>
