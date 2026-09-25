@@ -51,7 +51,10 @@ const Field = ({ label, icon: Icon, children }) => (
     <label className="block text-sm font-medium text-ink-600 dark:text-ink-300 mb-1.5">{label}</label>
     <div className="relative">
       {Icon && (
-        <Icon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400 pointer-events-none" strokeWidth={1.75} />
+        <Icon
+          className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400 pointer-events-none"
+          strokeWidth={1.75}
+        />
       )}
       {children}
     </div>
@@ -356,6 +359,12 @@ export default function UnifiedLogin() {
             </div>
           </div>
         </div>
+
+        <style>{`
+          @keyframes fade-in-up { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+          .animate-fade-in-up{animation:fade-in-up 0.5s ease-out both}
+          @media (prefers-reduced-motion: reduce){ .animate-fade-in-up{animation:none !important} }
+        `}</style>
       </div>
     );
   }
@@ -364,8 +373,9 @@ export default function UnifiedLogin() {
   if (!role) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-parchment dark:bg-navy-900 p-4 sm:p-6">
-        <div className="w-full max-w-2xl">
-          <div className="text-center mb-9 sm:mb-12 animate-fade-in-up">
+        <div className="w-full max-w-md">
+          {/* Header */}
+          <div className="text-center mb-8 sm:mb-10 animate-fade-in-up">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white dark:bg-navy-800 shadow-card border border-brass-500/30 mb-5">
               <img src="/logo.jpeg" alt="Dayspring Hub" className="w-11 h-11 rounded-xl object-cover" />
             </div>
@@ -376,31 +386,37 @@ export default function UnifiedLogin() {
             <p className="text-ink-500 dark:text-ink-300 text-sm sm:text-base">Select your role to continue</p>
           </div>
 
-          {/* Role cards grid */}
-          <div className="grid sm:grid-cols-2 gap-3.5 sm:gap-4">
+          {/* Role cards — compact width, taller height, modern */}
+          <div className="space-y-3">
             {Object.entries(roleConfig).map(([key, r], i) => (
               <button
                 key={key}
                 onClick={() => { playClick(); setRole(key); }}
                 style={{ animationDelay: `${i * 0.06}s` }}
-                className={`group relative overflow-hidden text-left flex items-center gap-4 p-5 bg-white dark:bg-navy-800 rounded-2xl border border-ink-200 dark:border-navy-600 ${r.cardHover} transition-all duration-200 hover:shadow-elevated hover:-translate-y-0.5 active:scale-[0.99] animate-fade-in-up`}
+                className={`group relative w-full overflow-hidden flex items-center gap-4 px-4 py-5 sm:px-5 sm:py-6 bg-white dark:bg-navy-800 rounded-2xl border border-ink-200 dark:border-navy-600 ${r.cardHover} transition-all duration-200 hover:shadow-elevated hover:-translate-y-0.5 active:scale-[0.99] animate-fade-in-up`}
               >
                 {/* Soft glow on hover */}
                 <div className={`pointer-events-none absolute -top-16 -right-16 w-40 h-40 rounded-full bg-gradient-to-br ${r.glow} opacity-0 group-hover:opacity-100 blur-2xl transition-opacity duration-300`} />
 
-                <div className={`relative w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br ${r.iconBg} text-white shadow-soft group-hover:scale-105 transition-transform duration-200`}>
-                  <r.Icon className="w-5 h-5" strokeWidth={1.75} />
+                {/* Icon chip */}
+                <div className={`relative w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br ${r.iconBg} text-white shadow-soft group-hover:scale-105 transition-transform duration-200`}>
+                  <r.Icon className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={1.75} />
                 </div>
 
+                {/* Text */}
                 <div className="relative text-left flex-1 min-w-0">
-                  <h3 className="font-semibold text-navy-800 dark:text-white text-sm sm:text-base">{r.label}</h3>
-                  <p className="text-xs sm:text-[13px] text-ink-500 dark:text-ink-300 leading-snug mt-0.5">{r.desc}</p>
+                  <h3 className="font-semibold text-navy-800 dark:text-white text-[15px] sm:text-base leading-tight">
+                    {r.label}
+                  </h3>
+                  <p className="text-xs sm:text-[13px] text-ink-500 dark:text-ink-300 leading-snug mt-1 truncate">
+                    {r.desc}
+                  </p>
                 </div>
 
-                <ChevronRight
-                  className="relative w-4 h-4 text-ink-300 dark:text-ink-500 group-hover:text-navy-700 dark:group-hover:text-white group-hover:translate-x-0.5 transition-all duration-200 flex-shrink-0"
-                  strokeWidth={2}
-                />
+                {/* Arrow chip */}
+                <div className="relative flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center bg-ink-100 dark:bg-navy-700 text-ink-500 dark:text-ink-400 group-hover:bg-navy-700 group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-navy-800 transition-all duration-200">
+                  <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform duration-200" strokeWidth={2} />
+                </div>
               </button>
             ))}
           </div>
@@ -446,7 +462,7 @@ export default function UnifiedLogin() {
           <ArrowLeft className="w-3.5 h-3.5" strokeWidth={1.75} /> Choose different role
         </button>
 
-        <div className={`bg-white dark:bg-navy-800 rounded-3xl border border-ink-200 dark:border-navy-700 shadow-elevated overflow-hidden grid lg:grid-cols-2 animate-fade-in-up`}>
+        <div className="bg-white dark:bg-navy-800 rounded-3xl border border-ink-200 dark:border-navy-700 shadow-elevated overflow-hidden grid lg:grid-cols-2 animate-fade-in-up">
           {/* Left: brand panel */}
           <div className="relative hidden lg:flex flex-col justify-between bg-navy-800 dark:bg-navy-950 p-10 overflow-hidden">
             <div className={`absolute -top-20 -right-20 w-72 h-72 rounded-full bg-gradient-to-br ${current.glow} blur-3xl`} />
